@@ -1,11 +1,6 @@
 """
 Orquestrador da Fase 2: construção do grafo de coocorrência.
 
-Uso:
-    python build_graph.py              # grafo COMPLETO (min_weight=1)
-    python build_graph.py 2            # descarta arestas de peso 1 (ruído)
-    python build_graph.py 3            # mantém apenas arestas com peso >= 3
-
 O script:
 1. Carrega os documentos pré-processados da Fase 1 (data/processed/documents.pkl).
    O `.pkl` é preferido porque preserva o tipo nativo `set` dos tokens, sem
