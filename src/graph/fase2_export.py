@@ -7,7 +7,7 @@ função está com dados de exemplo "chumbados". Para usar os dados REAIS gerado
 por esta fase, basta substituir a função do notebook por esta — ou importar
 daqui:
 
-    from fase2_export import importar_dados_fase2
+    from src.graph.fase2_export import importar_dados_fase2
     grafo_linear_bruto = importar_dados_fase2()
 
 A saída respeita o contrato auditado no Passo 0 da Fase 3:
@@ -19,7 +19,9 @@ import json
 import pickle
 from typing import Any, List
 
-_BASE = os.path.dirname(os.path.abspath(__file__))
+# Este arquivo agora vive em src/graph/, então subimos dois níveis
+# (src/graph -> src -> raiz) para localizar a pasta data/ na raiz do projeto.
+_BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _GRAPH_PKL = os.path.join(_BASE, "data", "processed", "graph_edges.pkl")
 _GRAPH_JSON = os.path.join(_BASE, "data", "processed", "graph_edges.json")
 
