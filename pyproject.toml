@@ -1,14 +1,12 @@
 [project]
 name = "projeto-final-grupo-2-eda2-2026-01-turma-03"
-version = "0.1.0"
-description = "Add your description here"
+version = "1.0.0"
+description = "Projeto de detecção de tópicos com grafos"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "spacy>=3.8,<4",
-]
-
-[project.optional-dependencies]
-nlp = [
-    "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+    "click>=8.0.0",
+    "setuptools",
+    "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
 ]

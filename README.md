@@ -8,11 +8,45 @@ Pipeline completo de **Processamento de Linguagem Natural (PLN)** para detectar 
 
 ---
 
-## 🚀 Quick Start (30 Segundos)
+## 🚀 Guia de Instalação e Execução
+
+Para rodar o projeto, siga os passos abaixo no seu terminal (VS Code, CMD, PowerShell ou Terminal):
+
+### 1. Preparar o Ambiente (Apenas na primeira vez)
+
+Crie um ambiente virtual para isolar as dependências:
+
+**No macOS / Linux:**
 
 ```bash
-# Entrar na pasta do projeto
-cd projeto-final-grupo-2-EDA2-2026-01-Turma-03
+# Entrar na pasta raiz do projeto
+
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+**No Windows:**
+
+```bash
+# Entrar na pasta raiz do projeto
+
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+> <small>_(Caso o Windows bloqueie a execução do script, use Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process no PowerShell antes)._</small>
+
+### 2. Instalar Dependências
+
+Com o ambiente ativado (você verá (.venv) no início da linha do terminal):
+
+```bash
+pip install -e .
+```
+
+### 3. Executar o Pipeline
+
+```bash
 
 # Executar pipeline de crição do grafo (Fase 1 + Fase 2)
 python3 main.py
@@ -29,7 +63,6 @@ python3 see.py
 
 - **README.md** (este arquivo) - Uso, arquitetura e guia rápido
 - **API.md** - Documentação técnica detalhada de classes e métodos
-- **Docstrings** nos arquivos - Apenas o essencial, não repetir README
 
 ---
 
