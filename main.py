@@ -1,22 +1,29 @@
 """
 Arquivo principal do projeto de PLN com Grafos.
 
-Orquestra o pipeline de extração e pré-processamento de textos.
+Orquestra o pipeline completo: pré-processamento e construção do grafo.
+Por padrão executa Fase 1 + Fase 2.
 
-Uso:
-    python main.py
+Uso: python main.py [OPÇÃO]
 
-O script:
-1. Lê os arquivos de texto dos diretórios data/raw/
-2. Processa cada documento através do pipeline
-3. Salva os resultados em data/processed/
+Opções:
+    (nenhuma)   Executa Fase 1 + Fase 2 (padrão)
+    phase1      Executa apenas Fase 1
+    phase2      Executa apenas Fase 2
+    --help      Mostra esta mensagem
+
+Documentação completa em: README.md
 """
 
 import os
+import sys
+import json
+import pickle
 from pathlib import Path
 from typing import List, Dict, Any
 
 from src.preprocessing import TextProcessor
+from src.graph import GraphBuilder
 from src.utils import FileHandler
 
 
@@ -25,10 +32,22 @@ DATA_RAW_PATH = "data/raw"
 DATA_PROCESSED_PATH = "data/processed"
 CATEGORIES = ["business", "entertainment"]
 
-# Configurações do processador
+# Configurações do processador (Fase 1)
 MIN_TOKEN_LENGTH = 2
 REMOVE_NUMBERS = True
 USE_LEMMATIZATION = True
+
+# Configurações da Fase 2 (Grafo)
+BASE_DIR = Path(__file__).resolve().parent
+DATA_PROCESSED_PATH_OBJ = BASE_DIR / "data" / "processed"
+DOCUMENTS_PKL = DATA_PROCESSED_PATH_OBJ / "documents.pkl"
+RAW_DATA_PATH_OBJ = BASE_DIR / "data" / "raw"
+GRAPH_PKL = DATA_PROCESSED_PATH_OBJ / "graph_edges.pkl"
+GRAPH_JSON = DATA_PROCESSED_PATH_OBJ / "graph_edges.json"
+
+# Peso mínimo padrão para arestas (1 = grafo completo)
+MIN_WEIGHT_DEFAULT = 1
+CATEGORY_DEFAULT = "all"
 
 
 def load_raw_documents(raw_path: str, categories: List[str]) -> List[Dict[str, Any]]:
@@ -195,43 +214,247 @@ def print_statistics(documents: List[Dict[str, Any]]) -> None:
     print("=" * 60)
 
 
+# ======================================================================
+# FASE 2: Funções de construção do grafo de coocorrência
+# ======================================================================
+
+def load_preprocessed_documents(pkl_path: str) -> List[Dict[str, Any]]:
+    """Carrega os documentos pré-processados a partir do pickle da Fase 1."""
+    if not os.path.exists(pkl_path):
+        raise FileNotFoundError(
+            f"Arquivo não encontrado: {pkl_path}\n"
+            f"Execute primeiro a Fase 1 com: python main.py"
+        )
+    with open(pkl_path, "rb") as f:
+        return pickle.load(f)
+
+
+def load_raw_documents_for_graph(categoria: str) -> List[Dict[str, Any]]:
+    """Carrega documentos diretamente da pasta raw quando o pickle não existe."""
+    pasta = str(RAW_DATA_PATH_OBJ)
+    categorias = [categoria] if categoria != CATEGORY_DEFAULT else ["business", "entertainment"]
+    processor = TextProcessor()
+    documentos = []
+
+    for cat in categorias:
+        cat_dir = os.path.join(pasta, cat)
+        if not os.path.isdir(cat_dir):
+            continue
+
+        for nome_arquivo in sorted(os.listdir(cat_dir)):
+            if not nome_arquivo.lower().endswith(".txt"):
+                continue
+
+            caminho = os.path.join(cat_dir, nome_arquivo)
+            with open(caminho, "r", encoding="utf-8", errors="ignore") as f:
+                texto = f.read()
+
+            documentos.append(
+                {
+                    "id": os.path.splitext(nome_arquivo)[0],
+                    "category": cat,
+                    "tokens": processor.process_document(texto),
+                }
+            )
+
+    if not documentos:
+        raise FileNotFoundError(
+            f"Nenhum documento encontrado em {RAW_DATA_PATH_OBJ} para a categoria '{categoria}'."
+        )
+
+    return documentos
+
+
+def filter_documents_by_category(
+    documents: List[Dict[str, Any]],
+    categoria: str
+) -> List[Dict[str, Any]]:
+    """Filtra documentos por categoria; 'all' mantém o corpus inteiro."""
+    if categoria == CATEGORY_DEFAULT:
+        return documents
+
+    return [doc for doc in documents if doc.get("category") == categoria]
+
+
+def save_graph_edges(
+    arestas: List[List[Any]],
+    caminho_pkl: Path,
+    caminho_json: Path
+) -> None:
+    """Salva a lista plana de arestas em pickle e em JSON."""
+    os.makedirs(os.path.dirname(str(caminho_pkl)), exist_ok=True)
+
+    with open(caminho_pkl, "wb") as f:
+        pickle.dump(arestas, f)
+
+    with open(caminho_json, "w", encoding="utf-8") as f:
+        json.dump(arestas, f, ensure_ascii=False)
+
+
+def build_graph_phase2(
+    min_weight: int = MIN_WEIGHT_DEFAULT,
+    categoria: str = CATEGORY_DEFAULT
+) -> None:
+    """
+    Orquestra a Fase 2: Construção do grafo de coocorrência.
+
+    Args:
+        min_weight: Peso mínimo das arestas a incluir no grafo.
+        categoria: Categoria de documentos ('all', 'business', 'entertainment').
+    """
+    print("\n" + "=" * 70)
+    print("🚀 FASE 2: Construção do Grafo de Coocorrência")
+    print("=" * 70)
+    print(f"Peso mínimo das arestas: {min_weight}")
+    print(f"Categoria selecionada: {categoria}")
+
+    # Etapa 1: Carregar documentos da Fase 1
+    print("\n📖 Etapa 1: Carregando documentos pré-processados...")
+    try:
+        if categoria == CATEGORY_DEFAULT and DOCUMENTS_PKL.exists():
+            documentos = load_preprocessed_documents(str(DOCUMENTS_PKL))
+            print(f"✅ {len(documentos)} documentos carregados de {DOCUMENTS_PKL}")
+        else:
+            documentos = load_raw_documents_for_graph(categoria)
+            print(f"✅ {len(documentos)} documentos carregados de {RAW_DATA_PATH_OBJ}")
+
+        documentos = filter_documents_by_category(documentos, categoria)
+        print(f"✅ {len(documentos)} documentos após filtro por categoria")
+    except FileNotFoundError as e:
+        print(f"❌ Erro: {e}")
+        return
+
+    # Etapa 2: Construir o grafo
+    print("\n🔗 Etapa 2: Construindo arestas de coocorrência...")
+    builder = GraphBuilder(min_weight=min_weight)
+    arestas = builder.build(documentos)
+    print(f"✅ Grafo construído: {len(arestas)} arestas")
+
+    # Etapa 3: Salvar
+    print("\n💾 Etapa 3: Salvando grafo...")
+    if categoria == CATEGORY_DEFAULT:
+        caminho_pkl = GRAPH_PKL
+        caminho_json = GRAPH_JSON
+    else:
+        caminho_pkl = DATA_PROCESSED_PATH_OBJ / f"graph_edges_{categoria}.pkl"
+        caminho_json = DATA_PROCESSED_PATH_OBJ / f"graph_edges_{categoria}.json"
+
+    save_graph_edges(arestas, caminho_pkl, caminho_json)
+    print(f"  ✓ Pickle: {caminho_pkl}")
+    print(f"  ✓ JSON:   {caminho_json}")
+
+    # Etapa 4: Estatísticas
+    print("\n📊 Etapa 4: Estatísticas do Grafo")
+    stats = GraphBuilder.estatisticas(arestas)
+    print("=" * 70)
+    print(f"Vértices (palavras únicas): {stats['vertices']}")
+    print(f"Arestas (conexões):         {stats['arestas']}")
+    print(f"Peso máximo:                {stats['peso_max']}")
+    print(f"Peso médio:                 {stats['peso_medio']:.2f}")
+    print("\nTop 5 conexões mais fortes:")
+    for palavra_a, palavra_b, peso in stats["top_5"]:
+        print(f"  {palavra_a} <--> {palavra_b}: {peso}")
+    print("=" * 70)
+
+    print("\n✨ Fase 2 concluída! Grafo pronto para a Fase 3.")
+
+
+def print_help():
+    """Exibe mensagem de ajuda sobre como usar o script."""
+    print("""
+╔═══════════════════════════════════════════════════════════════╗
+║         PIPELINE DE PLN COM GRAFOS - USAGE                   ║
+╚═══════════════════════════════════════════════════════════════╝
+
+Uso:
+    python main.py              # Executa Fase 1 + Fase 2 (PADRÃO)
+    python main.py phase1       # Executa apenas Fase 1
+    python main.py phase2       # Executa apenas Fase 2
+    python main.py --help       # Exibe esta mensagem
+
+Fase 1 - Pré-processamento de Textos:
+    - Lê arquivos de data/raw/[categoria]/
+    - Processa tokens, stopwords, etc
+    - Salva em data/processed/ (JSON, JSONL, Pickle)
+
+Fase 2 - Construção do Grafo de Coocorrência:
+    - Carrega documentos processados da Fase 1
+    - Constrói grafo ponderado de coocorrência
+    - Salva arestas em data/processed/ (Pickle, JSON)
+
+Exemplos:
+    python main.py                  # Pipeline completo (padrão)
+    python main.py phase1           # Apenas pré-processamento
+    python main.py phase2           # Apenas grafo (precisa Fase 1 feita)
+
+Documentação completa: README.md
+""")
+
+
 def main():
     """
     Função principal que orquestra o pipeline completo.
+    Por padrão executa Fase 1 + Fase 2. Use argumentos para customizar.
     """
-    print("🚀 Iniciando pipeline de pré-processamento de textos")
-    print("=" * 60)
+    # Verificar argumentos de linha de comando
+    phase = "all"  # padrão: ambas as fases
 
-    # Etapa 1: Carregar documentos brutos
-    print("\n📖 Etapa 1: Carregando documentos brutos...")
-    documents = load_raw_documents(DATA_RAW_PATH, CATEGORIES)
+    if len(sys.argv) > 1:
+        arg = sys.argv[1].lower().strip()
 
-    if not documents:
-        print("❌ Nenhum documento foi carregado. Verifique os caminhos e categorias.")
-        return
+        if arg in {"--help", "-h", "help"}:
+            print_help()
+            return
 
-    print(f"✅ {len(documents)} documentos carregados")
+        if arg in {"phase2", "--phase2", "-p2"}:
+            phase = "phase2"
+        elif arg == "phase1":
+            phase = "phase1"
+        elif arg in {"all", "--all", "-a"}:
+            phase = "all"
+        else:
+            print(f"❌ Argumento não reconhecido: {arg}")
+            print_help()
+            return
 
-    # Etapa 2: Inicializar processador
-    print("\n⚙️  Etapa 2: Inicializando processador de textos...")
-    processor = TextProcessor(
-        min_token_length=MIN_TOKEN_LENGTH,
-        remove_numbers=REMOVE_NUMBERS,
-        use_lemmatization=USE_LEMMATIZATION,
-    )
-    print("✅ Processador inicializado")
+    # Executar fases conforme solicitado
+    if phase in {"phase1", "all"}:
+        print("🚀 Iniciando FASE 1: Pré-processamento de Textos")
+        print("=" * 70)
 
-    # Etapa 3: Processar documentos
-    processed_docs = process_documents(documents, processor)
+        # Etapa 1: Carregar documentos brutos
+        print("\n📖 Etapa 1: Carregando documentos brutos...")
+        documents = load_raw_documents(DATA_RAW_PATH, CATEGORIES)
 
-    # Etapa 4: Salvar resultados
-    save_processed_documents(processed_docs, DATA_PROCESSED_PATH)
+        if not documents:
+            print("❌ Nenhum documento foi carregado. Verifique os caminhos e categorias.")
+            return
 
-    # Etapa 5: Exibir estatísticas
-    print_statistics(processed_docs)
+        print(f"✅ {len(documents)} documentos carregados")
 
-    print("\n✨ Pipeline concluído com sucesso!")
-    print(f"Resultados salvos em: {DATA_PROCESSED_PATH}/")
+        # Etapa 2: Inicializar processador
+        print("\n⚙️  Etapa 2: Inicializando processador de textos...")
+        processor = TextProcessor(
+            min_token_length=MIN_TOKEN_LENGTH,
+            remove_numbers=REMOVE_NUMBERS,
+            use_lemmatization=USE_LEMMATIZATION,
+        )
+        print("✅ Processador inicializado")
+
+        # Etapa 3: Processar documentos
+        processed_docs = process_documents(documents, processor)
+
+        # Etapa 4: Salvar resultados
+        save_processed_documents(processed_docs, DATA_PROCESSED_PATH)
+
+        # Etapa 5: Exibir estatísticas
+        print_statistics(processed_docs)
+
+        print("\n✨ Fase 1 concluída com sucesso!")
+        print(f"Resultados salvos em: {DATA_PROCESSED_PATH}/")
+
+    if phase in {"phase2", "all"}:
+        build_graph_phase2(min_weight=MIN_WEIGHT_DEFAULT, categoria=CATEGORY_DEFAULT)
 
 
 if __name__ == "__main__":

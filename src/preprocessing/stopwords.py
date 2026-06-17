@@ -48,6 +48,8 @@ BBC_STOPWORDS = {
     "says",
     "say",
 
+    "able",
+
     "mr",
     "mrs",
     "ms",
