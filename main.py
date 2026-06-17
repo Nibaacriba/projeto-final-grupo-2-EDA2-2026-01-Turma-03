@@ -17,7 +17,6 @@ Documentação completa em: README.md
 
 import os
 import sys
-import json
 import pickle
 from pathlib import Path
 from typing import List, Dict, Any
@@ -43,7 +42,6 @@ DATA_PROCESSED_PATH_OBJ = BASE_DIR / "data" / "processed"
 DOCUMENTS_PKL = DATA_PROCESSED_PATH_OBJ / "documents.pkl"
 RAW_DATA_PATH_OBJ = BASE_DIR / "data" / "raw"
 GRAPH_PKL = DATA_PROCESSED_PATH_OBJ / "graph_edges.pkl"
-GRAPH_JSON = DATA_PROCESSED_PATH_OBJ / "graph_edges.json"
 
 # Peso mínimo padrão para arestas (1 = grafo completo)
 MIN_WEIGHT_DEFAULT = 1
@@ -51,21 +49,7 @@ CATEGORY_DEFAULT = "all"
 
 
 def load_raw_documents(raw_path: str, categories: List[str]) -> List[Dict[str, Any]]:
-    """
-    Carrega documentos brutos dos diretórios de categorias.
-
-    Args:
-        raw_path: Caminho do diretório raw.
-        categories: Lista de categorias a processar.
-
-    Returns:
-        Lista de documentos com estrutura:
-        {
-            "id": str,
-            "category": str,
-            "text": str
-        }
-    """
+    """Carrega documentos brutos dos diretórios de categorias."""
     documents = []
 
     for category in categories:
@@ -76,7 +60,6 @@ def load_raw_documents(raw_path: str, categories: List[str]) -> List[Dict[str, A
             continue
 
         try:
-            # Listar arquivos da categoria
             files = FileHandler.list_files_in_directory(category_path)
             print(f"📁 Categoria '{category}': {len(files)} arquivos encontrados")
 
@@ -84,13 +67,9 @@ def load_raw_documents(raw_path: str, categories: List[str]) -> List[Dict[str, A
                 file_path = FileHandler.get_file_path(category_path, filename)
 
                 try:
-                    # Ler arquivo
                     text = FileHandler.read_text_file(file_path)
-
-                    # Extrair ID do nome do arquivo (ex: "001.txt" -> "001")
                     file_id = Path(filename).stem
 
-                    # Criar documento
                     document = {
                         "id": f"{category}_{file_id}",
                         "category": category,
@@ -113,22 +92,10 @@ def process_documents(
     documents: List[Dict[str, Any]],
     processor: TextProcessor
 ) -> List[Dict[str, Any]]:
-    """
-    Processa uma lista de documentos.
-
-    Args:
-        documents: Lista de documentos brutos.
-        processor: Instância de TextProcessor.
-
-    Returns:
-        Lista de documentos processados com tokens.
-    """
+    """Processa uma lista de documentos."""
     print("\n🔄 Iniciando processamento de documentos...")
-
     processed_documents = processor.process_batch(documents)
-
-    print(f"✅ {len(processed_documents)} documentos processados com sucesso")
-
+    print(f"✅ {len(processed_documents)} documentos processed com sucesso")
     return processed_documents
 
 
@@ -137,48 +104,28 @@ def save_processed_documents(
     output_path: str
 ) -> None:
     """
-    Salva documentos processados em múltiplos formatos.
-
-    Args:
-        documents: Lista de documentos processados.
-        output_path: Diretório de saída.
+    CORRIGIDO: Salva os documentos processados exclusivamente no formato Pickle (.pkl).
+    Removidas as exportações redundantes e lixo para JSON e JSONL.
     """
     print("\n💾 Salvando documentos processados...")
 
     # Criar diretório de saída se não existir
     os.makedirs(output_path, exist_ok=True)
 
-    # Salvar em JSON
-    json_path = os.path.join(output_path, "documents.json")
-    FileHandler.save_json(documents, json_path)
-    print(f"  ✓ Salvo em JSON: {json_path}")
-
-    # Salvar em JSONL
-    jsonl_path = os.path.join(output_path, "documents.jsonl")
-    FileHandler.save_jsonl(documents, jsonl_path)
-    print(f"  ✓ Salvo em JSONL: {jsonl_path}")
-
-    # Salvar em pickle (preserva estruturas Python nativas)
+    # Salvar unicamente em pickle para preservar as estruturas nativas de 'set' do Python
     pickle_path = os.path.join(output_path, "documents.pkl")
     FileHandler.save_python_pickle(documents, pickle_path)
     print(f"  ✓ Salvo em pickle: {pickle_path}")
 
 
 def print_statistics(documents: List[Dict[str, Any]]) -> None:
-    """
-    Imprime estatísticas sobre os documentos processados.
-
-    Args:
-        documents: Lista de documentos processados.
-    """
+    """Imprime estatísticas sobre os documentos processados."""
     print("\n📊 Estatísticas dos Documentos Processados:")
     print("=" * 60)
 
-    # Estatísticas gerais
     total_docs = len(documents)
     print(f"Total de documentos: {total_docs}")
 
-    # Estatísticas por categoria
     categories_count = {}
     total_tokens = 0
     min_tokens = float('inf')
@@ -198,14 +145,12 @@ def print_statistics(documents: List[Dict[str, Any]]) -> None:
         percentage = (count / total_docs) * 100
         print(f"  - {category}: {count} ({percentage:.1f}%)")
 
-    # Estatísticas de tokens
     print(f"\nTokens:")
     print(f"  - Total: {total_tokens}")
     print(f"  - Média por documento: {total_tokens / total_docs:.1f}")
     print(f"  - Mínimo: {min_tokens}")
     print(f"  - Máximo: {max_tokens}")
 
-    # Vocabulário único
     unique_tokens = set()
     for doc in documents:
         unique_tokens.update(doc["tokens"])
@@ -276,32 +221,19 @@ def filter_documents_by_category(
     return [doc for doc in documents if doc.get("category") == categoria]
 
 
-def save_graph_edges(
-    arestas: List[List[Any]],
-    caminho_pkl: Path,
-    caminho_json: Path
-) -> None:
-    """Salva a lista plana de arestas em pickle e em JSON."""
+def save_graph_edges(arestas: List[List[Any]], caminho_pkl: Path) -> None:
+    """CORRIGIDO: Salva a lista plana de arestas exclusivamente em formato binário Pickle."""
     os.makedirs(os.path.dirname(str(caminho_pkl)), exist_ok=True)
 
     with open(caminho_pkl, "wb") as f:
         pickle.dump(arestas, f)
-
-    with open(caminho_json, "w", encoding="utf-8") as f:
-        json.dump(arestas, f, ensure_ascii=False)
 
 
 def build_graph_phase2(
     min_weight: int = MIN_WEIGHT_DEFAULT,
     categoria: str = CATEGORY_DEFAULT
 ) -> None:
-    """
-    Orquestra a Fase 2: Construção do grafo de coocorrência.
-
-    Args:
-        min_weight: Peso mínimo das arestas a incluir no grafo.
-        categoria: Categoria de documentos ('all', 'business', 'entertainment').
-    """
+    """Orquestra a Fase 2: Construção do grafo de coocorrência."""
     print("\n" + "=" * 70)
     print("🚀 FASE 2: Construção do Grafo de Coocorrência")
     print("=" * 70)
@@ -330,18 +262,15 @@ def build_graph_phase2(
     arestas = builder.build(documentos)
     print(f"✅ Grafo construído: {len(arestas)} arestas")
 
-    # Etapa 3: Salvar
+    # Etapa 3: Salvar (CORRIGIDO: Removida completamente a rota e variáveis do JSON)
     print("\n💾 Etapa 3: Salvando grafo...")
     if categoria == CATEGORY_DEFAULT:
         caminho_pkl = GRAPH_PKL
-        caminho_json = GRAPH_JSON
     else:
         caminho_pkl = DATA_PROCESSED_PATH_OBJ / f"graph_edges_{categoria}.pkl"
-        caminho_json = DATA_PROCESSED_PATH_OBJ / f"graph_edges_{categoria}.json"
 
-    save_graph_edges(arestas, caminho_pkl, caminho_json)
+    save_graph_edges(arestas, caminho_pkl)
     print(f"  ✓ Pickle: {caminho_pkl}")
-    print(f"  ✓ JSON:   {caminho_json}")
 
     # Etapa 4: Estatísticas
     print("\n📊 Etapa 4: Estatísticas do Grafo")
@@ -375,29 +304,18 @@ Uso:
 Fase 1 - Pré-processamento de Textos:
     - Lê arquivos de data/raw/[categoria]/
     - Processa tokens, stopwords, etc
-    - Salva em data/processed/ (JSON, JSONL, Pickle)
+    - Salva unicamente em data/processed/documents.pkl
 
 Fase 2 - Construção do Grafo de Coocorrência:
     - Carrega documentos processados da Fase 1
     - Constrói grafo ponderado de coocorrência
-    - Salva arestas em data/processed/ (Pickle, JSON)
-
-Exemplos:
-    python main.py                  # Pipeline completo (padrão)
-    python main.py phase1           # Apenas pré-processamento
-    python main.py phase2           # Apenas grafo (precisa Fase 1 feita)
-
-Documentação completa: README.md
+    - Salva arestas exclusivamente em arquivos binários (.pkl)
 """)
 
 
 def main():
-    """
-    Função principal que orquestra o pipeline completo.
-    Por padrão executa Fase 1 + Fase 2. Use argumentos para customizar.
-    """
-    # Verificar argumentos de linha de comando
-    phase = "all"  # padrão: ambas as fases
+    """Função principal que orquestra o pipeline completo."""
+    phase = "all"
 
     if len(sys.argv) > 1:
         arg = sys.argv[1].lower().strip()
@@ -422,7 +340,6 @@ def main():
         print("🚀 Iniciando FASE 1: Pré-processamento de Textos")
         print("=" * 70)
 
-        # Etapa 1: Carregar documentos brutos
         print("\n📖 Etapa 1: Carregando documentos brutos...")
         documents = load_raw_documents(DATA_RAW_PATH, CATEGORIES)
 
@@ -432,7 +349,6 @@ def main():
 
         print(f"✅ {len(documents)} documentos carregados")
 
-        # Etapa 2: Inicializar processador
         print("\n⚙️  Etapa 2: Inicializando processador de textos...")
         processor = TextProcessor(
             min_token_length=MIN_TOKEN_LENGTH,
@@ -441,13 +357,8 @@ def main():
         )
         print("✅ Processador inicializado")
 
-        # Etapa 3: Processar documentos
         processed_docs = process_documents(documents, processor)
-
-        # Etapa 4: Salvar resultados
         save_processed_documents(processed_docs, DATA_PROCESSED_PATH)
-
-        # Etapa 5: Exibir estatísticas
         print_statistics(processed_docs)
 
         print("\n✨ Fase 1 concluída com sucesso!")

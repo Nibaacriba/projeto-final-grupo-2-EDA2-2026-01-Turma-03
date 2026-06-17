@@ -1,35 +1,66 @@
 from pathlib import Path
 from collections import defaultdict
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Set
 import argparse
 import os
-
-# Script de visualização das comunidades detectadas.
-# Documentação completa: README.md
+import pickle
 
 from src.communities import Phase3Pipeline
 from src.graph.exporter import importar_dados_fase2
 
 
+def _mapear_vocabulario_por_tema(base_dir: Path) -> Dict[str, Set[str]]:
+    """
+    Carrega os documentos processados da Fase 1 (documents.pkl)
+    e monta um mapa de palavras únicas por categoria.
+    """
+    vocab_por_tema = defaultdict(set)
+    pkl_path = base_dir / "data" / "processed" / "documents.pkl"
+
+    if not pkl_path.exists():
+        return vocab_por_tema
+
+    try:
+        with open(pkl_path, "rb") as f:
+            documentos = pickle.load(f)
+            for doc in documentos:
+                cat = doc.get("category")
+                tokens = doc.get("tokens", [])
+                if cat:
+                    vocab_por_tema[cat].update(tokens)
+    except Exception:
+        pass  # Se falhar, retorna o dicionário incompleto/vazio de forma segura
+
+    return vocab_por_tema
+
+
 def carregar_contexto_tema(theme: str) -> Tuple[List[List[str]], Dict[str, int]]:
     """
-    Carrega e processa comunidades para um tema específico.
-
-    Args:
-        theme: Tema a carregar ('all', 'business', ou 'entertainment')
-
-    Returns:
-        Tupla (comunidades_ordenadas, grau_por_palavra) onde:
-        - comunidades_ordenadas: Lista de comunidades (cada uma é lista de palavras)
-        - grau_por_palavra: Dicionário mapeando palavra → grau na MST
+    Carrega o grafo unificado e filtra as arestas dinamicamente
+    mantendo apenas as conexões entre palavras da categoria selecionada.
     """
-    # Carregar dados da Fase 2
-    os.environ['GRAPH_THEME'] = theme
-    edges = importar_dados_fase2()
+    # 1. Carrega todas as arestas do arquivo único 'graph_edges.pkl'
+    all_edges = importar_dados_fase2()
 
-    # Executar Phase 3 Pipeline
+    # Base do projeto para achar o documents.pkl
+    base_dir = Path(__file__).resolve().parent
+
+    # 2. Filtra o grafo se o usuário escolheu um tema específico
+    if theme in {"business", "entertainment"}:
+        vocab_map = _mapear_vocabulario_por_tema(base_dir)
+        palavras_validas = vocab_map.get(theme, set())
+
+        # Só mantém a aresta se AMBAS as palavras pertencerem ao vocabulário do tema
+        edges_filtradas = [
+            [u, v, w] for u, v, w in all_edges
+            if u in palavras_validas and v in palavras_validas
+        ]
+    else:
+        edges_filtradas = all_edges
+
+    # 3. Executar Phase 3 Pipeline sobre as arestas filtradas
     pipeline = Phase3Pipeline(verbose=False)
-    resultado = pipeline.run(edges)
+    resultado = pipeline.run(edges_filtradas)
 
     comunidades = resultado["communities"]
     mst_edges = resultado["mst_edges"]
@@ -61,6 +92,9 @@ def render_page(
     total = len(subtemas)
     start = (page - 1) * per_page
     end = min(start + per_page, total)
+
+    if total == 0:
+        return f"Tema selecionado: {theme}\n[AVISO] Nenhuma comunidade encontrada com os critérios atuais.\n"
 
     header_top10 = ', '.join(
         f'{w}({grau.get(w, 0)})'
@@ -115,21 +149,27 @@ def zoom_subtema(
 
 def main() -> None:
     """Executa a interface ASCII para visualização de comunidades."""
-    parser = argparse.ArgumentParser(description='Interface ASCII para visualizar subtemas')
+    parser = argparse.ArgumentParser(description='Interface ASCII para visualizar subtemas do grafo.')
     parser.add_argument('--page', type=int, default=1, help='Página a mostrar (1-based)')
     parser.add_argument('--per-page', type=int, default=10, help='Subtemas por página')
     parser.add_argument('--max-kw-chars', type=int, default=120, help='Max chars para lista de palavras por subtema')
     parser.add_argument('--zoom', type=int, help='ID do subtema para dar zoom')
     parser.add_argument('--zoom-terms', type=int, default=20, help='Quantos termos mostrar no zoom')
     parser.add_argument('--demo', action='store_true', help='Executa demonstração rápida')
-    parser.add_argument('--theme', choices=['all', 'business', 'entertainment'], default='all', help='Filtrar palavras por tema (business|entertainment)')
+    parser.add_argument('--theme', choices=['all', 'business', 'entertainment'], default='all', help='Filtrar palavras por tema')
 
     args = parser.parse_args()
-    subtemas, grau = carregar_contexto_tema(args.theme)
+
+    try:
+        subtemas, grau = carregar_contexto_tema(args.theme)
+    except FileNotFoundError as e:
+        print(e)
+        return
 
     if args.demo:
         print(render_page(subtemas, grau, args.theme, 1, args.per_page, args.max_kw_chars))
-        print(zoom_subtema(subtemas, grau, args.theme, 1, args.zoom_terms))
+        if subtemas:
+            print(zoom_subtema(subtemas, grau, args.theme, 1, args.zoom_terms))
         return
 
     if args.zoom:

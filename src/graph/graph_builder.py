@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Tuple
 
 # Tipos auxiliares para legibilidade das assinaturas
 Aresta = List[Any]              # [palavra_A: str, palavra_B: str, peso: int]
-ListaArestas = List[Aresta]     # [[A, B, peso], ...]  (lista plana de arestas)
+ListaArestas = List[Aresta]     # [[A, B, peso], ...] (lista plana de arestas)
 
 
 class GraphBuilder:
@@ -14,8 +14,7 @@ class GraphBuilder:
 
     Atributos:
         min_weight: Peso mínimo para uma aresta entrar no grafo final.
-            - min_weight=1 (padrão) mantém o grafo COMPLETO (toda coocorrência,
-              literal à especificação da Fase 2).
+            - min_weight=1 (padrão) mantém o grafo COMPLETO.
             - min_weight>=2 descarta arestas que ocorreram em um único documento
               (ruído), gerando um grafo muito menor e mais limpo para a MST.
     """
@@ -44,7 +43,7 @@ class GraphBuilder:
             de forma determinística (por peso decrescente e, em empate, ordem
             alfabética). O peso é sempre um `int` > 0.
         """
-        # Dicionário usado APENAS internamente para acumular os pesos com acesso O(1).
+        # Dicionário usado internamente para acumular os pesos com acesso O(1).
         coocorrencias: Dict[Tuple[str, str], int] = defaultdict(int)
 
         for doc in documents:
@@ -56,8 +55,7 @@ class GraphBuilder:
                 continue
 
             # Ordena os tokens para que cada par seja gerado em uma única
-            # direção canônica (A, B) com A < B — evita arestas duplicadas
-            # invertidas (A-B e B-A contam como a mesma aresta).
+            # direção canônica (A, B) com A < B — evita arestas duplicadas.
             tokens_ordenados = sorted(tokens)
 
             # Usa a biblioteca padrão do Python para gerar as combinações de
@@ -66,8 +64,8 @@ class GraphBuilder:
                 par = (palavra_a, palavra_b)
                 coocorrencias[par] += 1
 
-        # Converte o acumulador para a lista plana de arestas do contrato,
-        # aplicando o filtro de peso mínimo.
+        # Converte o acumulador para a lista plana de arestas exigida pelo contrato,
+        # garantindo que cada aresta seja uma sublista nativa [].
         arestas: ListaArestas = [
             [palavra_a, palavra_b, peso]
             for (palavra_a, palavra_b), peso in coocorrencias.items()
@@ -83,9 +81,7 @@ class GraphBuilder:
     def to_adjacency_list(
         arestas: ListaArestas,
     ) -> Dict[str, List[List[Any]]]:
-        """
-        (Opcional) Converte a lista plana de arestas em uma lista de adjacência.
-        """
+        """Converte a lista plana de arestas em uma lista de adjacência."""
         adjacencia: Dict[str, List[List[Any]]] = defaultdict(list)
         for palavra_a, palavra_b, peso in arestas:
             adjacencia[palavra_a].append([palavra_b, peso])
@@ -94,9 +90,7 @@ class GraphBuilder:
 
     @staticmethod
     def estatisticas(arestas: ListaArestas) -> Dict[str, Any]:
-        """
-        Calcula estatísticas descritivas do grafo gerado.
-        """
+        """Calcula estatísticas descritivas do grafo gerado."""
         if not arestas:
             return {
                 "vertices": 0,

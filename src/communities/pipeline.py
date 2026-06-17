@@ -1,7 +1,6 @@
 """
 Phase 3: Community Detection via Minimum Spanning Tree (MST) + Partitioning
 
-
 Fluxo:
   1. Validação de contrato
   2. Conversão peso → distância
@@ -52,12 +51,8 @@ class Phase3Pipeline:
 
         Returns:
             Dicionário com mst_edges, communities e statistics
-
-        Raises:
-            TypeError: Se contrato de entrada está violado
-            ValueError: Se dados são inconsistentes
         """
-        # 1. VALIDAÇÃO
+        # 1. VALIDAÇÃO RÍGIDA DE CONTRATO
         validated_edges = self._validate_contract(edges)
         if self.verbose:
             print(f"[VALIDAÇÃO] {len(validated_edges)} arestas aprovadas")
@@ -99,7 +94,7 @@ class Phase3Pipeline:
 
     def _validate_contract(self, edges: List[List]) -> List[List]:
         """
-        Valida o contrato de entrada (5 verificações).
+        Valida estritamente o contrato de entrada exigindo apenas listas de listas.
 
         Raises:
             TypeError/ValueError se qualquer regra for violada
@@ -114,10 +109,10 @@ class Phase3Pipeline:
 
         # Regra 3-5: Validação de cada aresta
         for idx, edge in enumerate(edges):
-            # Regra 3: Cada aresta é lista com 3 elementos
+            # Regra 3: Cada aresta deve ser estritamente uma sublista com exatamente 3 elementos
             if not isinstance(edge, list) or len(edge) != 3:
                 raise ValueError(
-                    f"Erro Estrutural na aresta [{idx}]: Esperado [Palavra_A, Palavra_B, Força]. "
+                    f"Erro Estrutural na aresta [{idx}]: Esperado sublista no formato [Palavra_A, Palavra_B, Força]. "
                     f"Encontrado: {edge}"
                 )
 
@@ -158,11 +153,7 @@ class Phase3Pipeline:
         return sorted(edges, key=lambda e: e[2])
 
     def _compute_mst_kruskal(self, sorted_edges: List[List]) -> List[List]:
-        """
-        Calcula MST usando algoritmo de Kruskal com Union-Find.
-
-        Retorna lista de arestas que formam a MST.
-        """
+        """Calcula MST usando algoritmo de Kruskal com Union-Find."""
         parent = {}
 
         def encontrar_raiz(palavra: str) -> str:
@@ -194,25 +185,15 @@ class Phase3Pipeline:
         return mst_edges
 
     def _partition_communities(self, mst_edges: List[List]) -> List[List[str]]:
-        """
-        Particiona MST em comunidades via divisão recursiva balanceada.
-
-        Estratégia: Encontrar melhor ponto de corte em cada componente
-        para atingir o target de comunidades.
-        """
-        # Construir matriz de adjacência da MST
+        """Particiona MST em comunidades via divisão recursiva balanceada."""
         adjacencia = defaultdict(list)
         for palavra_a, palavra_b, distancia in mst_edges:
             adjacencia[palavra_a].append((palavra_b, distancia))
             adjacencia[palavra_b].append((palavra_a, distancia))
 
-        # 1. Encontrar componentes iniciais (deve ser 1 se MST for conexa)
         componentes = self._find_initial_components(adjacencia)
-
-        # 2. Dividir até atingir target
         comunidades = self._recursive_partition(componentes, adjacencia)
 
-        # 3. Filtrar por tamanho mínimo
         comunidades_validas = [
             sorted(com) for com in comunidades
             if len(com) >= self.min_community_size
@@ -248,12 +229,7 @@ class Phase3Pipeline:
         return componentes
 
     def _recursive_partition(self, componentes: List[Set[str]], adjacencia: Dict) -> List[Set[str]]:
-        """
-        Divide componentes recursivamente até atingir target de comunidades.
-
-        Usa heurística: encontrar melhor corte (edge removal) que particiona
-        cada componente de forma mais balanceada possível.
-        """
+        """Divide componentes recursivamente até atingir target de comunidades."""
         componentes = [set(c) for c in componentes]
 
         while len(componentes) < self.target_communities:
@@ -271,31 +247,19 @@ class Phase3Pipeline:
                 foi_dividida = True
                 break
 
-            # Se nenhuma componente pode ser mais dividida, parar
             if not foi_dividida:
                 break
 
         return componentes
 
     def _find_best_cut(self, nodos: Set[str], adjacencia: Dict) -> Optional[Tuple[Set[str], Set[str]]]:
-        """
-        Encontra melhor ponto de corte em uma componente usando heurística.
-
-        Critérios:
-        - Ambos os lados devem ter tamanho >= min_community_size
-        - Minimizar desbalanceamento (próximo a 50-50)
-
-        Returns:
-            Tupla (subconjunto_a, subconjunto_b) ou None se não pode cortar
-        """
+        """Encontra o melhor ponto de corte em uma componente baseado em balanceamento topológico."""
         nodos = set(nodos)
         qtd = len(nodos)
 
-        # Muito pequeno para cortar
         if qtd < self.min_community_size * 2:
             return None
 
-        # DFS para calcular tamanho de subárvores
         raiz = next(iter(nodos))
         pai = {raiz: None}
         ordem = [raiz]
@@ -309,32 +273,27 @@ class Phase3Pipeline:
                     ordem.append(vizinho)
                     pilha.append(vizinho)
 
-        # Construir mapping de filhos
         filhos = defaultdict(list)
         for nodo, nodo_pai in pai.items():
             if nodo_pai is not None:
                 filhos[nodo_pai].append(nodo)
 
-        # Calcular tamanho de cada subárvore
         tamanho_subarvore = {nodo: 1 for nodo in nodos}
         for nodo in reversed(ordem):
             nodo_pai = pai.get(nodo)
             if nodo_pai is not None:
                 tamanho_subarvore[nodo_pai] += tamanho_subarvore[nodo]
 
-        # Encontrar melhor corte (remover edge com melhor balance)
         melhor = None
         alvo = qtd / 2.0
 
-        for nodo in ordem[1:]:  # Não considerar raiz
+        for nodo in ordem[1:]:
             tamanho_a = tamanho_subarvore[nodo]
             tamanho_b = qtd - tamanho_a
 
-            # Ambos os lados devem ter tamanho mínimo
             if tamanho_a < self.min_community_size or tamanho_b < self.min_community_size:
                 continue
 
-            # Score: minimizar desbalanceamento
             desbalanco = abs(tamanho_a - alvo)
             chave = (desbalanco, -max(tamanho_a, tamanho_b), nodo)
 
@@ -344,7 +303,6 @@ class Phase3Pipeline:
         if melhor is None:
             return None
 
-        # Extrair subárvore do ponto de corte
         nodo_corte = melhor[1]
         subarvore = set()
         pilha = [nodo_corte]
@@ -354,14 +312,12 @@ class Phase3Pipeline:
             if atual in subarvore:
                 continue
             subarvore.add(atual)
-            for filho in filhos.get(atual, []):
-                pilha.append(filho)
+            for child in filhos.get(atual, []):
+                pilha.append(child)
 
         complemento = nodos - subarvore
 
-        # Validação final
         if not subarvore or not complemento:
             return None
 
         return subarvore, complemento
-
