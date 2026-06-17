@@ -22,8 +22,19 @@ from typing import Any, List
 # Este arquivo agora vive em src/graph/, então subimos dois níveis
 # (src/graph -> src -> raiz) para localizar a pasta data/ na raiz do projeto.
 _BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_GRAPH_PKL = os.path.join(_BASE, "data", "processed", "graph_edges.pkl")
-_GRAPH_JSON = os.path.join(_BASE, "data", "processed", "graph_edges.json")
+
+
+def _paths_for_theme(theme: str):
+    if theme in {"business", "entertainment"}:
+        return (
+            os.path.join(_BASE, "data", "processed", f"graph_edges_{theme}.pkl"),
+            os.path.join(_BASE, "data", "processed", f"graph_edges_{theme}.json"),
+        )
+
+    return (
+        os.path.join(_BASE, "data", "processed", "graph_edges.pkl"),
+        os.path.join(_BASE, "data", "processed", "graph_edges.json"),
+    )
 
 
 def importar_dados_fase2() -> List[List[Any]]:
@@ -37,12 +48,15 @@ def importar_dados_fase2() -> List[List[Any]]:
     Returns:
         [[palavra_A, palavra_B, peso], ...]
     """
-    if os.path.exists(_GRAPH_PKL):
-        with open(_GRAPH_PKL, "rb") as f:
+    theme = os.environ.get("GRAPH_THEME", "all").strip().lower()
+    graph_pkl, graph_json = _paths_for_theme(theme)
+
+    if os.path.exists(graph_pkl):
+        with open(graph_pkl, "rb") as f:
             return pickle.load(f)
 
-    if os.path.exists(_GRAPH_JSON):
-        with open(_GRAPH_JSON, "r", encoding="utf-8") as f:
+    if os.path.exists(graph_json):
+        with open(graph_json, "r", encoding="utf-8") as f:
             return json.load(f)
 
     raise FileNotFoundError(
