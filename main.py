@@ -28,6 +28,7 @@ CATEGORIES = ["business", "entertainment"]
 # Configurações do processador
 MIN_TOKEN_LENGTH = 2
 REMOVE_NUMBERS = True
+USE_LEMMATIZATION = True
 
 
 def load_raw_documents(raw_path: str, categories: List[str]) -> List[Dict[str, Any]]:
@@ -215,7 +216,8 @@ def main():
     print("\n⚙️  Etapa 2: Inicializando processador de textos...")
     processor = TextProcessor(
         min_token_length=MIN_TOKEN_LENGTH,
-        remove_numbers=REMOVE_NUMBERS
+        remove_numbers=REMOVE_NUMBERS,
+        use_lemmatization=USE_LEMMATIZATION,
     )
     print("✅ Processador inicializado")
 
