@@ -1,79 +1,52 @@
-"""
-Conector da Fase 2 -> Fase 3.
-
-O notebook da Fase 3 espera uma função `importar_dados_fase2()` que devolve a
-lista plana de arestas [[palavra_A, palavra_B, peso], ...]. No notebook essa
-função está com dados de exemplo "chumbados". Para usar os dados REAIS gerados
-por esta fase, basta substituir a função do notebook por esta — ou importar
-daqui:
-
-    from src.graph.exporter import importar_dados_fase2
-    grafo_linear_bruto = importar_dados_fase2()
-
-A saída respeita o contrato auditado no Passo 0 da Fase 3:
-palavras como `str` e peso como `int` > 0.
-"""
-
+from pathlib import Path
 import os
-import json
 import pickle
-from typing import Any, List, Tuple
+from typing import Any, List
 
-# Este arquivo agora vive em src/graph/, então subimos dois níveis
-# (src/graph -> src -> raiz) para localizar a pasta data/ na raiz do projeto.
-_BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Definição do diretório base do projeto para garantir caminhos absolutos robustos
+_BASE = Path(__file__).resolve().parent.parent.parent
 
 
-def _paths_for_theme(theme: str) -> Tuple[str, str]:
+def _get_pkl_path(theme: str) -> str:
     """
-    Retorna os caminhos para os arquivos de grafo de um tema específico.
+    Retorna o caminho do arquivo Pickle (.pkl) baseado estritamente no mapeamento de temas.
 
-    Args:
-        theme: Tema ('business', 'entertainment', ou 'all')
-
-    Returns:
-        Tupla (caminho_pickle, caminho_json)
+    Conforme a arquitetura:
+    - 'business' -> graph_edges_business.pkl
+    - 'entertainment' -> graph_edges_entertainment.pkl
+    - 'all' (Padrão) -> graph_edges.pkl
     """
-    if theme in {"business", "entertainment"}:
-        return (
-            os.path.join(_BASE, "data", "processed", f"graph_edges_{theme}.pkl"),
-            os.path.join(_BASE, "data", "processed", f"graph_edges_{theme}.json"),
-        )
+    if theme == "business":
+        return os.path.join(_BASE, "data", "processed", "graph_edges_business.pkl")
+    elif theme == "entertainment":
+        return os.path.join(_BASE, "data", "processed", "graph_edges_entertainment.pkl")
 
-    return (
-        os.path.join(_BASE, "data", "processed", "graph_edges.pkl"),
-        os.path.join(_BASE, "data", "processed", "graph_edges.json"),
-    )
+    # Caso padrão mapeado na arquitetura para o dataset global
+    return os.path.join(_BASE, "data", "processed", "graph_edges.pkl")
 
 
 def importar_dados_fase2() -> List[List[Any]]:
     """
-    Carrega a lista plana de arestas gerada pela Fase 2.
-
-    Tenta primeiro o pickle (preserva tipos nativos); se não existir, recorre
-    ao JSON. Lança FileNotFoundError caso nenhum dos dois exista — nesse caso,
-    rode antes: `python build_graph.py`.
+    Carrega e importa os dados de arestas do grafo gerados na Fase 2.
+    O formato exclusivo utilizado para leitura é o Pickle (.pkl).
 
     Returns:
-        [[palavra_A, palavra_B, peso], ...]
+        List[List]: Uma lista plana de arestas no formato [[palavra1, palavra2, peso], ...].
+
+    Raises:
+        FileNotFoundError: Caso o arquivo .pkl correspondente ao tema não seja encontrado.
     """
+    # Recupera o tema atual configurado no ambiente (default: 'all')
     theme = os.environ.get("GRAPH_THEME", "all").strip().lower()
-    graph_pkl, graph_json = _paths_for_theme(theme)
+    graph_pkl = _get_pkl_path(theme)
 
     if os.path.exists(graph_pkl):
         with open(graph_pkl, "rb") as f:
-            return pickle.load(f)
-
-    if os.path.exists(graph_json):
-        with open(graph_json, "r", encoding="utf-8") as f:
-            return json.load(f)
+            dados = pickle.load(f)
+            # Garantia absoluta de contrato: força a conversão interna de cada aresta para lista
+            return [list(aresta) for aresta in dados]
 
     raise FileNotFoundError(
-        "Grafo da Fase 2 não encontrado. Gere-o antes com: python build_graph.py"
+        f"[ERRO] O arquivo de dados principal da Fase 2 não foi encontrado em: {graph_pkl}\n"
+        f"Certifique-se de que a Fase 2 foi executada e gerou os arquivos .pkl para o tema '{theme}'."
     )
-
-
-if __name__ == "__main__":
-    arestas = importar_dados_fase2()
-    print(f"Arestas carregadas: {len(arestas)}")
-    print("Primeiras 5:", arestas[:5])

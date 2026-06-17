@@ -1,23 +1,24 @@
 """
 Manipulador de arquivos para entrada e saída de dados.
 
-Fornece funcionalidades para:
-- Ler documentos dos arquivos de texto
-- Escrever documentos processados em formatos diversos
-- Listar arquivos em diretórios
+Fornece funcionalidades otimizadas para:
+- Ler documentos dos arquivos de texto brutos
+- Listar arquivos em diretórios do dataset
+- Salvar e carregar dados processados no formato binário Pickle (.pkl)
 """
 
 import os
-import json
+import pickle
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Any
 
 
 class FileHandler:
     """
-    Manipulador de arquivos para o projeto.
+    Manipulador de arquivos centralizado do projeto.
 
-    Gerencia leitura de documentos brutos e escrita de dados processados.
+    Gerencia com alta performance a leitura de documentos brutos e
+    a persistência binária do pipeline.
     """
 
     @staticmethod
@@ -33,7 +34,7 @@ class FileHandler:
 
         Raises:
             FileNotFoundError: Se o arquivo não existir.
-            IOError: Se houver erro na leitura.
+            IOError: Se houver erro na leitura do arquivo.
         """
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -46,17 +47,19 @@ class FileHandler:
     @staticmethod
     def list_files_in_directory(directory: str, extension: str = ".txt") -> List[str]:
         """
-        Lista todos os arquivos com uma extensão específica em um diretório.
+        Lista e ordena de forma determinística todos os arquivos com uma extensão
+        específica dentro de um diretório.
 
         Args:
-            directory: Caminho do diretório.
-            extension: Extensão dos arquivos a listar (padrão: ".txt").
+            directory: Caminho do diretório base.
+            extension: Extensão dos arquivos a filtrar (padrão: ".txt").
 
         Returns:
-            Lista com os nomes dos arquivos encontrados (sem caminho).
+            Lista com os nomes dos arquivos encontrados (apenas o nome + extensão).
 
         Raises:
             FileNotFoundError: Se o diretório não existir.
+            NotADirectoryError: Se o caminho informado não for um diretório válido.
         """
         directory_path = Path(directory)
 
@@ -64,9 +67,9 @@ class FileHandler:
             raise FileNotFoundError(f"Diretório não encontrado: {directory}")
 
         if not directory_path.is_dir():
-            raise NotADirectoryError(f"{directory} não é um diretório")
+            raise NotADirectoryError(f"O caminho informado não é um diretório: {directory}")
 
-        # Lista arquivos com a extensão especificada
+        # Busca e ordena os arquivos para garantir reprodutibilidade nos lotes
         files = sorted([
             f.name for f in directory_path.glob(f"*{extension}")
         ])
@@ -76,114 +79,62 @@ class FileHandler:
     @staticmethod
     def get_file_path(directory: str, filename: str) -> str:
         """
-        Constrói o caminho completo de um arquivo.
+        Constrói o caminho completo de um arquivo de forma segura para o SO.
 
         Args:
             directory: Diretório base.
-            filename: Nome do arquivo.
+            filename: Nome do arquivo com extensão.
 
         Returns:
-            Caminho completo do arquivo.
+            Caminho completo do arquivo como string.
         """
         return os.path.join(directory, filename)
 
     @staticmethod
-    def save_json(data: List[Dict[str, Any]], output_path: str, indent: int = 2) -> None:
+    def save_python_pickle(data: Any, output_path: str) -> None:
         """
-        Salva dados em formato JSON.
+        Salva dados complexos em formato binário Pickle (.pkl).
+
+        Mantém intactos os tipos nativos do Python (como sets, tuplas e grafos)
+        sem a necessidade de conversões pesadas de strings, garantindo máxima performance.
 
         Args:
-            data: Dados a salvar (lista de dicionários).
-            output_path: Caminho de saída do arquivo JSON.
-            indent: Número de espaços para indentação (padrão: 2).
+            data: Dados a serem serializados (listas, dicionários, sets, etc).
+            output_path: Caminho completo de saída do arquivo pkl.
 
         Raises:
-            IOError: Se houver erro na escrita.
+            IOError: Se houver erro na escrita do arquivo binário.
         """
         try:
-            # Converter sets para listas para serialização JSON
-            json_data = []
-            for item in data:
-                json_item = item.copy()
-                if isinstance(json_item.get("tokens"), set):
-                    json_item["tokens"] = sorted(list(json_item["tokens"]))
-                json_data.append(json_item)
+            # Cria os diretórios pais automaticamente se eles não existirem
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(json_data, f, ensure_ascii=False, indent=indent)
-
-        except IOError as e:
-            raise IOError(f"Erro ao salvar arquivo JSON {output_path}: {e}")
-
-    @staticmethod
-    def save_jsonl(data: List[Dict[str, Any]], output_path: str) -> None:
-        """
-        Salva dados em formato JSONL (JSON Lines).
-
-        Cada documento é salvo em uma linha separada.
-        Formato útil para processamento streaming.
-
-        Args:
-            data: Dados a salvar (lista de dicionários).
-            output_path: Caminho de saída do arquivo JSONL.
-
-        Raises:
-            IOError: Se houver erro na escrita.
-        """
-        try:
-            with open(output_path, "w", encoding="utf-8") as f:
-                for item in data:
-                    json_item = item.copy()
-                    if isinstance(json_item.get("tokens"), set):
-                        json_item["tokens"] = sorted(list(json_item["tokens"]))
-                    f.write(json.dumps(json_item, ensure_ascii=False) + "\n")
-
-        except IOError as e:
-            raise IOError(f"Erro ao salvar arquivo JSONL {output_path}: {e}")
-
-    @staticmethod
-    def save_python_pickle(data: List[Dict[str, Any]], output_path: str) -> None:
-        """
-        Salva dados em formato Python pickle.
-
-        Mantém tipos nativos do Python (como sets) sem conversão.
-
-        Args:
-            data: Dados a salvar (lista de dicionários).
-            output_path: Caminho de saída do arquivo pickle.
-
-        Raises:
-            IOError: Se houver erro na escrita.
-        """
-        try:
-            import pickle
             with open(output_path, "wb") as f:
-                pickle.dump(data, f)
+                pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         except IOError as e:
-            raise IOError(f"Erro ao salvar arquivo pickle {output_path}: {e}")
+            raise IOError(f"Erro crítico ao salvar arquivo pickle binário em {output_path}: {e}")
 
     @staticmethod
-    def load_python_pickle(input_path: str) -> List[Dict[str, Any]]:
+    def load_python_pickle(input_path: str) -> Any:
         """
-        Carrega dados do formato Python pickle.
+        Carrega dados serializados do formato Python pickle.
 
         Args:
             input_path: Caminho do arquivo pickle a carregar.
 
         Returns:
-            Dados carregados (lista de dicionários).
+            Os dados originais reconstruídos com seus tipos nativos preservados.
 
         Raises:
-            FileNotFoundError: Se o arquivo não existir.
-            IOError: Se houver erro na leitura.
+            FileNotFoundError: Se o arquivo binário não existir.
+            IOError: Se houver erro na leitura ou desserialização do arquivo.
         """
         try:
-            import pickle
             with open(input_path, "rb") as f:
                 return pickle.load(f)
 
         except FileNotFoundError:
-            raise FileNotFoundError(f"Arquivo não encontrado: {input_path}")
-        except IOError as e:
-            raise IOError(f"Erro ao carregar arquivo pickle {input_path}: {e}")
+            raise FileNotFoundError(f"Arquivo de dados binários não encontrado: {input_path}")
+        except (IOError, pickle.UnpicklingError) as e:
+            raise IOError(f"Erro ao ler/desserializar o arquivo pickle em {input_path}: {e}")

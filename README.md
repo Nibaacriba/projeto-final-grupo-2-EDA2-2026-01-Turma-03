@@ -14,8 +14,11 @@ Pipeline completo de **Processamento de Linguagem Natural (PLN)** para detectar 
 # Entrar na pasta do projeto
 cd projeto-final-grupo-2-EDA2-2026-01-Turma-03
 
-# Executar pipeline completo (Fase 1 + Fase 2)
+# Executar pipeline de crição do grafo (Fase 1 + Fase 2)
 python3 main.py
+
+# Executar pipeline de detecção de comunidades (Fase 3)
+python3 see.py
 
 # ✅ Pronto! Dados gerados em data/processed/
 ```
@@ -83,12 +86,13 @@ ENTRADA (Texto Bruto)
 1. Normalização          → Remove espaços em branco extras
 2. Minúsculas           → Converte para lowercase
 3. Remover Pontuação    → Remove !, @, #, $, etc.
-4. Tokenização          → Divide em lista de palavras
+4. Tokenização          → Divide em lista de palavras através do spaCy
 5. Filtro de Tokens     → Remove palavras < 2 chars e números puros
-6. Remover Stopwords    → Filtra palavras comuns (the, and, a, etc.)
-7. Deduplicação         → Converte para Set (garante unicidade)
+6. Lematização          → Reduz palavras ao radical funcional (ex: running -> run)
+7. Remover Stopwords    → Filtra termos comuns comparando os lemas gerados
+8. Deduplicação         → Converte para Set (garante unicidade dos lemas)
         ↓
-SAÍDA: Set[str] (Tokens únicos por documento)
+SAÍDA: Set[str] (Lemas únicos por documento)
 ```
 
 **Inputs:**
@@ -97,8 +101,6 @@ SAÍDA: Set[str] (Tokens únicos por documento)
 
 **Outputs:**
 
-- `data/processed/documents.json` - Formato legível
-- `data/processed/documents.jsonl` - Formato JSON Lines
 - `data/processed/documents.pkl` - Pickle (preserva tipos nativos)
 
 ### 🔗 Fase 2: Construção do Grafo de Coocorrência
@@ -116,7 +118,6 @@ Cria um grafo ponderado onde:
 **Outputs:**
 
 - `data/processed/graph_edges.pkl` - Formato nativo Python
-- `data/processed/graph_edges.json` - Formato legível
 
 **Contrato da Fase 2 (validado em testes):**
 
@@ -147,7 +148,7 @@ Particiona o grafo em 20 comunidades balanceadas usando:
 
 ## 🎯 Como Usar
 
-### Executar Pipeline Completo (Padrão)
+### Executar Pipeline de criação do grafo (Padrão)
 
 ```bash
 python3 main.py
@@ -187,31 +188,22 @@ python3 main.py --help
 python3 run_tests.py
 ```
 
-Ou com pytest:
-
-```bash
-pytest tests/ -v
-```
-
 ### Teste Específico
 
 ```bash
 # Apenas Fase 1
 python3 run_tests.py phase1
-python3 -m tests.test_phase1
 
 # Apenas Fase 2
 python3 run_tests.py phase2
-python3 -m tests.test_phase2
 
 # Apenas Fase 3
 python3 run_tests.py phase3
-python3 -m tests.test_phase3
 ```
 
 ### Resultados de Testes
 
-- **Phase 1:** 5 testes (JSON, JSONL, Pickle, Qualidade, Integração)
+- **Phase 1:** 3 testes ( Pickle, Qualidade, Integração)
 - **Phase 2:** 6 testes (Coocorrência, Peso, Canonicalidade, Filtro, Ordenação, Contrato)
 - **Phase 3:** 7 testes (Validação, Conversão, Sorting, MST, Partição, Integração, Dados Reais)
 
@@ -227,21 +219,41 @@ Após executar o pipeline completo, visualize as comunidades com:
 python3 see.py
 ```
 
+- **--theme**: Filtra as conexões do grafo por categoria antes de computar as comunidades. Opções: all (padrão), business ou entertainment.
+
+- **--page**: Número da página a ser exibida (padrão: 1).
+
+- **--per-page**: Quantidade de subtemas exibidos por página (padrão: 10).
+
+- **--max-kw-chars**: Limite máximo de caracteres de visualização da lista de palavras por linha na tabela (padrão: 120).
+
+- **--zoom**: ID numérico de um subtema específico para inspecionar os termos de forma isolada e vertical.
+
+- **--zoom-terms**: Quantidade de termos detalhados a serem exibidos dentro do modo zoom (padrão: 20).
+
+- **--demo**: Executa um fluxo rápido mostrando a primeira página e aplicando zoom automático no primeiro subtema encontrado.
+
 ### Exemplos de Uso
 
 ```bash
-# Mostrar página 1 (10 comunidades por página)
-python3 see.py --page 1 --per-page 10
+# Navegar pelas páginas da tabela ASCII (10 subtemas por vez)
+python3 see.py --page 2 --per-page 10
 
-# Filtrar por tema
+# Filtrar e recalcular as comunidades dinamicamente para um tema específico
 python3 see.py --theme business
 python3 see.py --theme entertainment
 
-# Zoom em comunidade específica (mostra termos mais relevantes)
-python3 see.py --zoom 3 --zoom-terms 30
+# Expandir um subtema específico para inspecionar o grau individual de seus termos
+python3 see.py --zoom 1 --zoom-terms 15
 
-# Demo rápido
+# Ajustar a largura máxima da tabela de palavras-chave para telas menores
+python3 see.py --max-kw-chars 80
+
+# Demo rápido de verificação visual
 python3 see.py --demo
+
+# exemplo completo
+python3 see.py --theme business --page 1 --per-page 5 --max-kw-chars 150 --zoom 2 --zoom-terms 10
 ```
 
 ---

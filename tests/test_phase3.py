@@ -458,7 +458,7 @@ if __name__ == "__main__":
         test_casos_extremos()
 
         print("\n" + "=" * 70)
-        print("✅ TODOS OS TESTES DE PHASE3 PASSARAM!")
+        print("✅ TODOS OS TESTES DA FASE 3 PASSARAM!")
         print("=" * 70)
 
     except AssertionError as e:

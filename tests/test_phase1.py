@@ -1,160 +1,103 @@
 """
 Testes da Fase 1: Pré-processamento de textos.
 
-Testa a qualidade dos dados pré-processados (JSON/JSONL/Pickle).
+Testa a qualidade dos dados pré-processados salvos exclusivamente no formato Pickle (.pkl).
+Seguindo o padrão de design visual e tratamento de logs da Fase 3.
 """
 
-import json
 from typing import List, Dict, Any
-
 from src.utils import FileHandler
-from src.graph import GraphBuilder
 
 
-def test_json_output():
+def test_pickle_output() -> List[Dict[str, Any]]:
     """
-    Testa o carregamento e validação do arquivo JSON.
+    Testa o carregamento e validação de contrato e estrutura do arquivo Pickle.
     """
     print("=" * 70)
-    print("TESTE 1: Validação do Arquivo JSON")
-    print("=" * 70)
-
-    try:
-        with open("data/processed/documents.json", "r", encoding="utf-8") as f:
-            documents = json.load(f)
-
-        print(f"✅ Arquivo JSON carregado com sucesso")
-        print(f"   Total de documentos: {len(documents)}")
-
-        # Validar estrutura
-        for i, doc in enumerate(documents[:3]):
-            assert "id" in doc, "Campo 'id' não encontrado"
-            assert "category" in doc, "Campo 'category' não encontrado"
-            assert "tokens" in doc, "Campo 'tokens' não encontrado"
-            assert isinstance(doc["tokens"], list), "Tokens deve ser lista"
-
-        print(f"✅ Estrutura validada (primeiros 3 documentos OK)")
-
-        # Estatísticas
-        total_tokens = sum(len(doc["tokens"]) for doc in documents)
-        unique_tokens = set()
-        for doc in documents:
-            unique_tokens.update(doc["tokens"])
-
-        print(f"   Total de tokens: {total_tokens}")
-        print(f"   Vocabulário único: {len(unique_tokens)}")
-
-    except Exception as e:
-        print(f"❌ Erro: {e}")
-        raise
-
-
-def test_jsonl_output():
-    """
-    Testa o carregamento e validação do arquivo JSONL.
-    """
-    print("\n" + "=" * 70)
-    print("TESTE 2: Validação do Arquivo JSONL")
-    print("=" * 70)
-
-    try:
-        documents = []
-        with open("data/processed/documents.jsonl", "r", encoding="utf-8") as f:
-            for line in f:
-                documents.append(json.loads(line))
-
-        print(f"✅ Arquivo JSONL carregado com sucesso")
-        print(f"   Total de documentos: {len(documents)}")
-        print(f"   Cada linha é um documento JSON válido")
-
-        # Verificar primeiros documentos
-        categories_count = {}
-        for doc in documents:
-            category = doc["category"]
-            categories_count[category] = categories_count.get(category, 0) + 1
-
-        print(f"   Documentos por categoria:")
-        for category, count in sorted(categories_count.items()):
-            print(f"     - {category}: {count}")
-
-    except Exception as e:
-        print(f"❌ Erro: {e}")
-        raise
-
-
-def test_pickle_output():
-    """
-    Testa o carregamento e validação do arquivo pickle.
-    """
-    print("\n" + "=" * 70)
-    print("TESTE 3: Validação do Arquivo Pickle")
+    print("TESTE 1: Validação do Arquivo Pickle (.pkl)")
     print("=" * 70)
 
     try:
         documents = FileHandler.load_python_pickle("data/processed/documents.pkl")
+        checks = []
 
-        print(f"✅ Arquivo pickle carregado com sucesso")
-        print(f"   Total de documentos: {len(documents)}")
+        # Check 1: Carregamento do arquivo
+        check1 = isinstance(documents, list) and len(documents) > 0
+        checks.append(("Arquivo carregado e não vazio", check1, f"Total: {len(documents)} docs"))
 
-        # Verificar estrutura (sets em vez de listas)
-        for doc in documents[:3]:
-            assert isinstance(doc["tokens"], set), "Tokens devem ser sets no pickle"
+        if check1:
+            # Check 2: Chaves obrigatórias e estrutura
+            structure_ok = True
+            type_ok = True
+            for doc in documents[:5]:  # Amostragem de segurança
+                if not ("id" in doc and "category" in doc and "tokens" in doc):
+                    structure_ok = False
+                if not isinstance(doc["tokens"], set):
+                    type_ok = False
 
-        print(f"✅ Estrutura validada (tokens como sets)")
+            checks.append(("Chaves obrigatórias nos dicionários", structure_ok, "id, category, tokens presentes"))
+            checks.append(("Tipagem de tokens como Set nativo", type_ok, "Garante busca em tempo O(1)"))
 
-        # Mostrar exemplo
-        print(f"\nExemplo de documento com tokens como set:")
-        print(f"   ID: {documents[0]['id']}")
-        print(f"   Categoria: {documents[0]['category']}")
-        print(f"   Tokens ({len(documents[0]['tokens'])}): {sorted(list(documents[0]['tokens']))[:10]}...")
+            # Check 3: Presença equilibrada de categorias bbc
+            categories = {doc["category"] for doc in documents}
+            check3 = "business" in categories and "entertainment" in categories
+            checks.append(("Presença de categorias obrigatórias", check3, f"Detectadas: {list(categories)}"))
+
+        # Exibir resultados no padrão Fase 3
+        all_passed = all(check[1] for check in checks)
+        for check_name, passed, detail in checks:
+            status = "✅" if passed else "❌"
+            print(f"{status} {check_name}: {detail}")
+
+        if all_passed:
+            print(f"\n✅ Validação do arquivo Pickle concluída com sucesso!")
+            return documents
+        else:
+            raise AssertionError("O arquivo serializado viola a integridade da Fase 1.")
 
     except Exception as e:
-        print(f"❌ Erro: {e}")
+        print(f"❌ Erro no Teste do Pickle: {e}")
         raise
 
 
-def test_data_quality():
+def test_data_quality(documents: List[Dict[str, Any]]) -> None:
     """
-    Testa a qualidade dos dados processados.
+    Testa os critérios de qualidade do texto limpo gerado pelo TextProcessor.
     """
     print("\n" + "=" * 70)
-    print("TESTE 4: Qualidade dos Dados")
+    print("TESTE 2: Critérios de Qualidade de Dados (PLN)")
     print("=" * 70)
 
     try:
-        with open("data/processed/documents.json", "r", encoding="utf-8") as f:
-            documents = json.load(f)
-
-        # Verificações
         checks = []
 
         # Check 1: IDs únicos
         ids = [doc["id"] for doc in documents]
         unique_ids = len(set(ids))
         check1 = unique_ids == len(documents)
-        checks.append(("IDs únicos", check1, f"{unique_ids}/{len(documents)}"))
+        checks.append(("IDs únicos no corpus", check1, f"{unique_ids}/{len(documents)}"))
 
         # Check 2: Categorias válidas
         valid_categories = {"business", "entertainment"}
         categories = {doc["category"] for doc in documents}
         check2 = categories == valid_categories
-        checks.append(("Categorias válidas", check2, str(categories)))
+        checks.append(("Categorias válidas mapeadas", check2, str(categories)))
 
         # Check 3: Tokens não vazios
         empty_token_docs = [d for d in documents if len(d["tokens"]) == 0]
         check3 = len(empty_token_docs) == 0
-        checks.append(("Documentos sem tokens vazios", check3, f"{len(empty_token_docs)} vazios"))
+        checks.append(("Ausência de documentos sem palavras", check3, f"{len(empty_token_docs)} vazios"))
 
-        # Check 4: Tokens contêm strings
+        # Check 4: Tokens contêm strings válidas (Filtro e Lematização)
         invalid_tokens = 0
         for doc in documents:
             for token in doc["tokens"]:
                 if not isinstance(token, str) or len(token) < 2:
                     invalid_tokens += 1
         check4 = invalid_tokens == 0
-        checks.append(("Tokens válidos (strings com len >= 2)", check4, f"{invalid_tokens} inválidos"))
+        checks.append(("Tokens válidos (letras e len >= 2)", check4, f"{invalid_tokens} inválidos"))
 
-        # Check 5: Não contém stopwords comuns
+        # Check 5: Não contém nenhuma stopword residual
         common_stopwords = {"the", "a", "an", "and", "or", "is", "are"}
         stopword_violations = 0
         for doc in documents:
@@ -162,100 +105,81 @@ def test_data_quality():
                 if token in common_stopwords:
                     stopword_violations += 1
         check5 = stopword_violations == 0
-        checks.append(("Sem stopwords comuns", check5, f"{stopword_violations} violações"))
+        checks.append(("Exclusão total de stopwords", check5, f"{stopword_violations} violações"))
 
         # Exibir resultados
         all_passed = all(check[1] for check in checks)
-
         for check_name, passed, detail in checks:
             status = "✅" if passed else "❌"
             print(f"{status} {check_name}: {detail}")
 
         if all_passed:
-            print(f"\n✅ Todos os testes de qualidade passaram!")
+            print(f"\n✅ Todos os testes de qualidade de PLN passaram!")
         else:
-            print(f"\n⚠️  Alguns testes falharam")
-            raise AssertionError("Testes de qualidade falharam")
+            print(f"\n❌ Alguns testes de consistência falharam")
+            raise AssertionError("Os dados processados violam as restrições da Fase 1.")
 
     except Exception as e:
-        print(f"❌ Erro: {e}")
+        print(f"❌ Erro no Teste de Qualidade: {e}")
         raise
 
 
-def test_integration_for_graph_building():
+def test_integration_pipeline(documents: List[Dict[str, Any]]) -> None:
     """
-    Simula como a próxima etapa (construção de grafo) consumirá os dados.
+    Testa a integração da Fase 1 com os requisitos de entrada para a Fase 2.
     """
     print("\n" + "=" * 70)
-    print("TESTE 5: Integração com Construção de Grafo")
+    print("TESTE 3: Integração e Prontidão de Contrato para Grafo")
     print("=" * 70)
 
     try:
-        # Carregar usando pickle (melhor para próxima etapa)
-        documents = FileHandler.load_python_pickle("data/processed/documents.pkl")
+        checks = []
 
-        print(f"✅ Dados carregados para construção de grafo")
-        print(f"   Total de documentos: {len(documents)}")
+        # Check 1: Tipagem do objeto para barramento
+        check1 = isinstance(documents, list)
+        checks.append(("Objeto de barramento é uma lista", check1, type(documents).__name__))
 
-        # Simular construção de grafo
-        word_cooccurrence = {}
-        total_pairs = 0
+        # Check 2: Volume mínimo de dados para gerar coocorrência estável
+        check2 = len(documents) >= 500
+        checks.append(("Volume de corpus suficiente para a Fase 2", check2, f"{len(documents)} documentos"))
 
-        for doc in documents:
-            tokens = sorted(list(doc["tokens"]))
+        # Check 3: Avaliar densidade de tokens únicos por documento (evita underfitting)
+        avg_tokens = sum(len(d["tokens"]) for d in documents) / len(documents)
+        check3 = avg_tokens >= 10
+        checks.append(("Densidade léxica média por artigo", check3, f"{avg_tokens:.2f} tokens/doc"))
 
-            # Criar pares de coocorrência
-            for i in range(len(tokens)):
-                for j in range(i + 1, len(tokens)):
-                    pair = (tokens[i], tokens[j])
-                    word_cooccurrence[pair] = word_cooccurrence.get(pair, 0) + 1
-                    total_pairs += 1
+        # Exibir resultados
+        all_passed = all(check[1] for check in checks)
+        for check_name, passed, detail in checks:
+            status = "✅" if passed else "❌"
+            print(f"{status} {check_name}: {detail}")
 
-        print(f"✅ Simulação de grafo de coocorrência:")
-        print(f"   Total de pares únicos: {len(word_cooccurrence)}")
-        print(f"   Total de ocorrências de pares: {total_pairs}")
-
-        # Top 10 coocorrências
-        top_pairs = sorted(
-            word_cooccurrence.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )[:10]
-
-        print(f"\n   Top 10 coocorrências mais frequentes:")
-        for (word1, word2), count in top_pairs:
-            print(f"     - ({word1}, {word2}): {count}")
-
-        print(f"\n✅ Dados prontos para construção de grafo!")
+        if all_passed:
+            print(f"\n✅ Contrato de barramento e integração validado para a Fase 2!")
+        else:
+            raise AssertionError("Os dados da Fase 1 não estão prontos para integração.")
 
     except Exception as e:
-        print(f"❌ Erro: {e}")
+        print(f"❌ Erro no Teste de Integração: {e}")
         raise
 
 
-def main():
-    """
-    Executa todos os testes da Fase 1.
-    """
+if __name__ == "__main__":
     print("\n")
     print("╔" + "=" * 68 + "╗")
     print("║" + " " * 68 + "║")
-    print("║" + "  FASE 1: TESTES DE PRÉ-PROCESSAMENTO".center(68) + "║")
+    print("║" + "  FASE 1: TESTES DE PRÉ-PROCESSAMENTO (PADRONIZADO)".center(68) + "║")
     print("║" + " " * 68 + "║")
     print("╚" + "=" * 68 + "╝")
     print()
 
-    test_json_output()
-    test_jsonl_output()
-    test_pickle_output()
-    test_data_quality()
-    test_integration_for_graph_building()
-
-    print("\n" + "=" * 70)
-    print("✨ Testes da Fase 1 concluídos!")
-    print("=" * 70)
-    print()
-
-
-if __name__ == "__main__":
-    main()
+    try:
+        docs = test_pickle_output()
+        test_data_quality(docs)
+        test_integration_pipeline(docs)
+        print("\n" + "=" * 70)
+        print("✅ TODOS OS TESTES DA FASE 1 PASSARAM!")
+        print("=" * 70)
+    except AssertionError as e:
+        print(f"\n❌ Testes falharam: {e}")
+        exit(1)

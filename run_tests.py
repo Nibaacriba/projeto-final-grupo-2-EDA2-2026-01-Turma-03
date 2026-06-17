@@ -20,39 +20,47 @@ def print_header(title):
 
 
 def print_help():
-    """Exibe mensagem de ajuda."""
+    """Exibe mensagem de ajuda em português."""
     print("""
 ╔═══════════════════════════════════════════════════════════════╗
-║              TEST RUNNER - BBC NEWS PROJECT                   ║
+║              EXECUTOR DE TESTES - PROJETO BBC NEWS            ║
 ╚═══════════════════════════════════════════════════════════════╝
 
 Uso:
     python3 run_tests.py              # Executa todos os testes
-    python3 run_tests.py phase1       # Executa testes da Fase 1
-    python3 run_tests.py phase2       # Executa testes da Fase 2
-    python3 run_tests.py phase3       # Executa testes da Fase 3
+    python3 run_tests.py fase1        # Executa testes da Fase 1
+    python3 run_tests.py fase2        # Executa testes da Fase 2
+    python3 run_tests.py fase3        # Executa testes da Fase 3
     python3 run_tests.py --help       # Exibe esta mensagem
 
 Testes Disponíveis:
-    Phase 1: Validação de pré-processamento (JSON, JSONL, Pickle)
-    Phase 2: Validação de grafo de coocorrência
-    Phase 3: Validação de detecção de comunidades
+    Fase 1: Validação de pré-processamento e persistência em Pickle (.pkl)
+    Fase 2: Validação de construção do grafo de coocorrência
+    Fase 3: Validação de detecção de comunidades (MST/Kruskal)
 
 Exemplos:
-    python3 run_tests.py                    # Todos
-    python3 run_tests.py phase1             # Só Fase 1
-    python3 run_tests.py phase2 phase3      # Fase 2 + Fase 3
+    python3 run_tests.py                    # Todos os testes
+    python3 run_tests.py fase1              # Apenas Fase 1
+    python3 run_tests.py fase2 fase3        # Fase 2 + Fase 3
 """)
 
 
 def run_tests(phases):
-    """Executa testes das fases especificadas."""
+    """Executa testes das fases especificadas sem repetir mensagens de sucesso individuais."""
     project_root = Path(__file__).resolve().parent
 
+    # Mapeamento para aceitar "faseX" em português
     phase_mapping = {
-        "phase1": "tests.test_phase1",
-        "phase2": "tests.test_phase2",
-        "phase3": "tests.test_phase3",
+        "fase1": "tests.test_phase1",
+        "fase2": "tests.test_phase2",
+        "fase3": "tests.test_phase3",
+    }
+
+    # Nomes amigáveis para exibição de logs
+    phase_names = {
+        "fase1": "FASE 1",
+        "fase2": "FASE 2",
+        "fase3": "FASE 3"
     }
 
     total_passed = 0
@@ -64,7 +72,9 @@ def run_tests(phases):
             continue
 
         module = phase_mapping[phase]
-        print_header(f"EXECUTANDO {phase.upper()}")
+        nome_exibicao = phase_names[phase]
+
+        print_header(f"EXECUTANDO {nome_exibicao}")
 
         try:
             result = subprocess.run(
@@ -76,19 +86,19 @@ def run_tests(phases):
 
             if result.returncode == 0:
                 total_passed += 1
-                print(f"\n✅ {phase.upper()} passou!\n")
+                # O print redundante que aparecia aqui foi removido!
             else:
                 total_failed += 1
-                print(f"\n❌ {phase.upper()} falhou!\n")
+                print(f"\n❌ {nome_exibicao} falhou no processo geral!\n")
 
         except subprocess.TimeoutExpired:
             total_failed += 1
-            print(f"\n❌ {phase.upper()} excedeu o tempo limite!\n")
+            print(f"\n❌ {nome_exibicao} excedeu o tempo limite!\n")
         except Exception as e:
             total_failed += 1
-            print(f"\n❌ Erro ao executar {phase}: {e}\n")
+            print(f"\n❌ Erro ao executar {nome_exibicao}: {e}\n")
 
-    # Resumo final
+    # Resumo final padronizado
     print_header("RESUMO DOS TESTES")
     print(f"✅ Aprovados: {total_passed}")
     print(f"❌ Falhados:  {total_failed}")
@@ -101,18 +111,22 @@ def main():
     """Função principal."""
     if len(sys.argv) < 2:
         # Se nenhum argumento, executar todos
-        phases = ["phase1", "phase2", "phase3"]
+        phases = ["fase1", "fase2", "fase3"]
     else:
         arg = sys.argv[1].lower().strip()
+
+        # Normalizar caso o usuário digite "phase1" em vez de "fase1"
+        arg = arg.replace("phase", "fase")
 
         if arg in {"--help", "-h", "help"}:
             print_help()
             return True
 
         if arg in {"all", "-a"}:
-            phases = ["phase1", "phase2", "phase3"]
+            phases = ["fase1", "fase2", "fase3"]
         else:
-            phases = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
+            # Captura todos os argumentos passados e converte "phase" para "fase"
+            phases = [a.lower().strip().replace("phase", "fase") for a in sys.argv[1:] if not a.startswith("-")]
 
     if not phases:
         print("❌ Nenhuma fase especificada!")

@@ -3,151 +3,152 @@ Testes da Fase 2: Construção do grafo de coocorrência.
 
 Validam a lógica de coocorrência do GraphBuilder e verificam se a saída
 respeita o CONTRATO da Fase 3 (as 5 regras auditadas no Passo 0).
+Seguindo o padrão de design visual e tratamento de logs da Fase 3.
 """
 
 from src.graph import GraphBuilder
 
 
-def _falhou(msg: str) -> None:
-    """Helper para levantar AssertionError com mensagem customizada."""
-    raise AssertionError(msg)
-
-
-def teste_coocorrencia_basica():
-    """Pares dentro do mesmo documento devem ter peso 1 (uma ocorrência)."""
-    docs = [{"id": "d1", "category": "x", "tokens": {"a", "b", "c"}}]
-    arestas = GraphBuilder().build(docs)
-    # 3 tokens -> C(3,2) = 3 arestas
-    if len(arestas) != 3:
-        _falhou(f"Esperava 3 arestas, obtive {len(arestas)}")
-    for *_, peso in arestas:
-        if peso != 1:
-            _falhou(f"Peso esperado 1, obtido {peso}")
-    print("✓ teste_coocorrencia_basica")
-
-
-def teste_incremento_de_peso():
-    """Par que reaparece em outro documento deve ter o peso incrementado."""
-    docs = [
-        {"id": "d1", "category": "x", "tokens": {"a", "b"}},
-        {"id": "d2", "category": "y", "tokens": {"a", "b"}},
-        {"id": "d3", "category": "y", "tokens": {"a", "c"}},
-    ]
-    arestas = GraphBuilder().build(docs)
-    pesos = {(a, b): p for a, b, p in arestas}
-    if pesos.get(("a", "b")) != 2:
-        _falhou(f"Par a-b deveria ter peso 2, obtive {pesos.get(('a','b'))}")
-    if pesos.get(("a", "c")) != 1:
-        _falhou(f"Par a-c deveria ter peso 1, obtive {pesos.get(('a','c'))}")
-    print("✓ teste_incremento_de_peso")
-
-
-def teste_aresta_canonica_sem_duplicar_invertida():
-    """A-B e B-A devem ser a MESMA aresta (par ordenado canônico)."""
-    docs = [
-        {"id": "d1", "category": "x", "tokens": {"b", "a"}},
-        {"id": "d2", "category": "y", "tokens": {"a", "b"}},
-    ]
-    arestas = GraphBuilder().build(docs)
-    if len(arestas) != 1:
-        _falhou(f"Esperava 1 aresta única, obtive {len(arestas)}")
-    a, b, p = arestas[0]
-    if (a, b) != ("a", "b") or p != 2:
-        _falhou(f"Aresta canônica incorreta: {arestas[0]}")
-    print("✓ teste_aresta_canonica_sem_duplicar_invertida")
-
-
-def teste_filtro_peso_minimo():
-    """min_weight deve descartar arestas abaixo do limiar."""
-    docs = [
-        {"id": "d1", "category": "x", "tokens": {"a", "b"}},
-        {"id": "d2", "category": "y", "tokens": {"a", "b"}},
-        {"id": "d3", "category": "y", "tokens": {"c", "d"}},
-    ]
-    arestas = GraphBuilder(min_weight=2).build(docs)
-    # Só a-b (peso 2) sobrevive; c-d (peso 1) é descartado.
-    if len(arestas) != 1 or arestas[0][:2] != ["a", "b"]:
-        _falhou(f"Filtro min_weight=2 falhou: {arestas}")
-    print("✓ teste_filtro_peso_minimo")
-
-
-def teste_ordenacao_por_peso():
-    """A saída deve vir ordenada por peso decrescente."""
-    docs = [
-        {"id": "d1", "category": "x", "tokens": {"a", "b"}},
-        {"id": "d2", "category": "y", "tokens": {"a", "b"}},
-        {"id": "d3", "category": "y", "tokens": {"a", "c"}},
-    ]
-    arestas = GraphBuilder().build(docs)
-    pesos = [p for *_, p in arestas]
-    if pesos != sorted(pesos, reverse=True):
-        _falhou(f"Arestas não ordenadas por peso desc: {pesos}")
-    print("✓ teste_ordenacao_por_peso")
-
-
-def teste_contrato_fase3():
+def test_graph_builder_logic():
     """
-    Valida a saída contra as 5 regras do contrato da Fase 3 (Passo 0).
+    Testa as regras lógicas e propriedades matemáticas do construtor de grafos.
     """
-    docs = [
-        {"id": "d1", "category": "x", "tokens": {"banco", "selic", "juros"}},
-        {"id": "d2", "category": "y", "tokens": {"banco", "selic"}},
-    ]
-    grafo = GraphBuilder().build(docs)
+    print("=" * 70)
+    print("TESTE 1: Propriedades e Lógica do Grafo (GraphBuilder)")
+    print("=" * 70)
 
-    # Regra 1: objeto raiz é uma lista
-    if not isinstance(grafo, list):
-        _falhou("Regra 1 violada: saída não é list")
-    # Regra 2: não vazia
-    if len(grafo) == 0:
-        _falhou("Regra 2 violada: lista vazia")
-    for i, aresta in enumerate(grafo):
-        # Regra 3: sublista de exatamente 3 elementos
-        if not isinstance(aresta, list) or len(aresta) != 3:
-            _falhou(f"Regra 3 violada no índice {i}: {aresta}")
-        a, b, peso = aresta
-        # Regra 4: índices 0 e 1 são strings
-        if not isinstance(a, str) or not isinstance(b, str):
-            _falhou(f"Regra 4 violada no índice {i}: {aresta}")
-        # Regra 5: peso é número > 0
-        if not isinstance(peso, (int, float)) or peso <= 0:
-            _falhou(f"Regra 5 violada no índice {i}: {aresta}")
-    print("✓ teste_contrato_fase3 (5 regras do Passo 0)")
+    try:
+        builder = GraphBuilder()
+        checks = []
+
+        # Check 1: Coocorrência Básica e Contagem Combinatória Kn
+        docs_1 = [{"id": "d1", "category": "x", "tokens": {"a", "b", "c"}}]
+        edges_1 = builder.build(docs_1)
+        check1 = len(edges_1) == 3 and all(p == 1 for *_, p in edges_1)
+        checks.append(("Coocorrência básica e pesos unitários C(3,2)", check1, f"Geradas {len(edges_1)} arestas"))
+
+        # Check 2: Incremento de peso cumulativo
+        docs_2 = [
+            {"id": "d1", "category": "x", "tokens": {"a", "b"}},
+            {"id": "d2", "category": "y", "tokens": {"a", "b"}},
+            {"id": "d3", "category": "y", "tokens": {"a", "c"}},
+        ]
+        edges_2 = builder.build(docs_2)
+        weights = {(a, b): p for a, b, p in edges_2}
+        check2 = weights.get(("a", "b")) == 2 and weights.get(("a", "c")) == 1
+        checks.append(("Incremento de peso cumulativo inter-documentos", check2, f"a-b peso: {weights.get(('a', 'b'))}"))
+
+        # Check 3: Aresta Canônica Lexicográfica (Sem duplicados reflexivos)
+        docs_3 = [
+            {"id": "d1", "category": "x", "tokens": {"b", "a"}},
+            {"id": "d2", "category": "y", "tokens": {"a", "b"}},
+        ]
+        edges_3 = builder.build(docs_3)
+        check3 = len(edges_3) == 1 and edges_3[0][0] == "a" and edges_3[0][1] == "b"
+        checks.append(("Normalização canônica lexicográfica (palavra_a < palavra_b)", check3, f"Aresta gerada: {edges_3}"))
+
+        # Check 4: Filtro de ruído por peso mínimo (min_weight)
+        docs_4 = [
+            {"id": "d1", "category": "x", "tokens": {"a", "b"}},
+            {"id": "d2", "category": "y", "tokens": {"a", "b"}},
+            {"id": "d3", "category": "y", "tokens": {"c", "d"}},
+        ]
+        edges_4 = GraphBuilder(min_weight=2).build(docs_4)
+        check4 = len(edges_4) == 1 and edges_4[0][:2] == ["a", "b"]
+        checks.append(("Filtro de ruído ativo (min_weight=2)", check4, f"Sobreviventes: {len(edges_4)} arestas"))
+
+        # Check 5: Ordenação estável descendente por peso
+        edges_sorted = builder.build(docs_2)
+        weights_list = [p for *_, p in edges_sorted]
+        check5 = weights_list == sorted(weights_list, reverse=True)
+        checks.append(("Ordenação padrão por peso decrescente", check5, f"Pesos: {weights_list}"))
+
+        # Exibir resultados no padrão Fase 3
+        all_passed = all(check[1] for check in checks)
+        for check_name, passed, detail in checks:
+            status = "✅" if passed else "❌"
+            print(f"{status} {check_name}: {detail}")
+
+        if not all_passed:
+            raise AssertionError("Falha nas propriedades matemáticas do GraphBuilder.")
+
+    except Exception as e:
+        print(f"❌ Erro na lógica do GraphBuilder: {e}")
+        raise
 
 
-def main():
+def test_contrato_fase3():
     """
-    Executa todos os testes da Fase 2 (grafo de coocorrência).
+    Valida a saída contra o contrato de 5 regras exigido pela infraestrutura da Fase 3.
     """
+    print("\n" + "=" * 70)
+    print("TESTE 2: Validação Rígida de Contrato para a Fase 3")
+    print("=" * 70)
+
+    try:
+        docs = [
+            {"id": "d1", "category": "x", "tokens": {"banco", "selic", "juros"}},
+            {"id": "d2", "category": "y", "tokens": {"banco", "selic"}},
+        ]
+        grafo = GraphBuilder().build(docs)
+        checks = []
+
+        # Regra 1: Objeto raiz é uma lista
+        r1 = isinstance(grafo, list)
+        checks.append(("Regra 1: Estrutura raiz é uma Lista", r1, type(grafo).__name__))
+
+        # Regra 2: Lista não-vazia
+        r2 = len(grafo) > 0
+        checks.append(("Regra 2: Lista de arestas não está vazia", r2, f"Contém {len(grafo)} elementos"))
+
+        if r1 and r2:
+            r3, r4, r5 = True, True, True
+            for aresta in grafo:
+                # Regra 3: Sublista de exatamente tamanho 3
+                if not isinstance(aresta, list) or len(aresta) != 3:
+                    r3 = False
+                else:
+                    a, b, peso = aresta
+                    # Regra 4: Vértices posicionado em 0 e 1 são Strings
+                    if not isinstance(a, str) or not isinstance(b, str):
+                        r4 = False
+                    # Regra 5: Peso numérico estritamente maior que zero
+                    if not isinstance(peso, (int, float)) or peso <= 0:
+                        r5 = False
+
+            checks.append(("Regra 3: Sublistas de tamanho exato igual a 3", r3, "Formato [u, v, w] mantido"))
+            checks.append(("Regra 4: Vértices u e v mapeados como Strings", r4, "Tipagem str validada"))
+            checks.append(("Regra 5: Pesos numéricos estritamente positivos (> 0)", r5, "Valores matemáticos consistentes"))
+
+        # Exibir resultados
+        all_passed = all(check[1] for check in checks)
+        for check_name, passed, detail in checks:
+            status = "✅" if passed else "❌"
+            print(f"{status} {check_name}: {detail}")
+
+        if not all_passed:
+            raise AssertionError("A saída gerada quebrou o contrato de barramento da Fase 3.")
+
+    except Exception as e:
+        print(f"❌ Erro na validação do contrato da Fase 2: {e}")
+        raise
+
+
+if __name__ == "__main__":
     print("\n")
     print("╔" + "=" * 68 + "╗")
     print("║" + " " * 68 + "║")
-    print("║" + "  FASE 2: TESTES DE CONSTRUÇÃO DO GRAFO".center(68) + "║")
+    print("║" + "  FASE 2: TESTES DE CONSTRUÇÃO DO GRAFO (PADRONIZADO)".center(68) + "║")
     print("║" + " " * 68 + "║")
     print("╚" + "=" * 68 + "╝")
     print()
 
-    print("=" * 70)
-    print("TESTE: Fase 2 — Grafo de Coocorrência")
-    print("=" * 70)
-
     try:
-        teste_coocorrencia_basica()
-        teste_incremento_de_peso()
-        teste_aresta_canonica_sem_duplicar_invertida()
-        teste_filtro_peso_minimo()
-        teste_ordenacao_por_peso()
-        teste_contrato_fase3()
-        print("\n✅ Todos os testes da Fase 2 passaram (contrato da Fase 3 respeitado)!")
+        test_graph_builder_logic()
+        test_contrato_fase3()
+        print("\n" + "=" * 70)
+        print("✅ TODOS OS TESTES DA FASE 2 PASSARAM!")
+        print("=" * 70)
     except AssertionError as e:
-        print(f"❌ Falha em teste da Fase 2: {e}")
-        raise
-
-    print("\n" + "=" * 70)
-    print("✨ Testes da Fase 2 concluídos!")
-    print("=" * 70)
-    print()
-
-
-if __name__ == "__main__":
-    main()
+        print(f"\n❌ Testes falharam: {e}")
+        exit(1)
