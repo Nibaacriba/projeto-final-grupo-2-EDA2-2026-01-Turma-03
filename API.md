@@ -154,6 +154,298 @@ processor = TextProcessor()
 - **Causa:** O formato JSON não possui suporte nativo à estrutura `set` (Conjunto). Por essa razão, ao salvar em JSON, o `FileHandler` converte os tokens em uma lista comum para manter o arquivo válido.
 - **Solução:** Para qualquer processamento matemático posterior no grafo, priorize ler o arquivo `documents.pkl` via `FileHandler.load_python_pickle()`.
 
+---
+
+## 🔗 Módulo: `GraphBuilder` (Fase 2)
+
+Classe responsável pela construção do grafo de coocorrência a partir dos documentos pré-processados.
+
+### Inicialização
+
+```python
+from src.graph import GraphBuilder
+
+# Grafo completo (todas as coocorrências, padrão)
+builder = GraphBuilder(min_weight=1)
+
+# Grafo filtrado (remove ruído: arestas com peso < 2)
+builder_filtered = GraphBuilder(min_weight=2)
 ```
 
+### Parâmetros do Construtor
+
+| Parâmetro | Tipo  | Padrão | Descrição |
+|---|---|---|---|
+| `min_weight` | `int` | `1` | Peso mínimo para uma aresta entrar no grafo final |
+
+**Nota sobre `min_weight`:**
+- `min_weight=1`: Grafo COMPLETO (respeta especificação literal da Fase 2)
+- `min_weight≥2`: Grafo FILTRADO (remove arestas que ocorrem em apenas 1 documento = ruído)
+
+### Métodos Principais
+
+#### 1. `build(documents: List[Dict]) -> List[List]`
+
+Constrói a lista plana de arestas de coocorrência.
+
+**Parâmetros:**
+- `documents`: Lista de documentos da Fase 1. Cada documento é um `dict` no formato:
+  ```python
+  {
+      "id": "doc_001",
+      "category": "business",
+      "tokens": {"market", "stock", "trade", ...}  # ← Set de tokens únicos
+  }
+  ```
+
+**Retorno:** Lista plana de arestas ordenada por peso decrescente:
+```python
+[
+    ["market", "stock", 125],     # Peso 125 (coocorrência forte)
+    ["market", "trade", 98],      # Peso 98
+    ["stock", "exchange", 45],    # Peso 45
+    ...
+]
 ```
+
+**Propriedades da saída:**
+1. Cada aresta é `[palavra_a: str, palavra_b: str, peso: int/float > 0]`
+2. Aresta canônica: sempre `palavra_a < palavra_b` (não repete invertidas)
+3. Determinística: mesma entrada = mesma saída (ordenada por peso)
+
+#### 2. `to_adjacency_list(arestas: List[List]) -> Dict[str, List]`
+
+**(Método estático)** Converte lista plana em lista de adjacência (opcional).
+
+**Entrada:**
+```python
+arestas = [["market", "stock", 125], ["stock", "trade", 45], ...]
+```
+
+**Saída:**
+```python
+{
+    "market": [["stock", 125], ["trade", 35], ...],
+    "stock": [["market", 125], ["trade", 45], ...],
+    "trade": [["stock", 45], ["market", 35], ...],
+    ...
+}
+```
+
+**Uso:** Apenas se consumidor preferir visão por vértice. Fase 3 usa lista plana.
+
+#### 3. `estatisticas(arestas: List[List]) -> Dict[str, Any]`
+
+**(Método estático)** Retorna estatísticas do grafo.
+
+**Saída:**
+```python
+{
+    "num_arestas": 2500000,
+    "num_vertices": 5000,
+    "peso_total": 1250000,
+    "peso_media": 500.0,
+    "peso_min": 1,
+    "peso_max": 150,
+    "densidade": 0.0002  # (2 * arestas) / (vertices * (vertices-1))
+}
+```
+
+### Exemplos de Uso
+
+```python
+from src.utils import FileHandler
+from src.graph import GraphBuilder
+
+# Carregar documentos da Fase 1
+documents = FileHandler.load_python_pickle("data/processed/documents.pkl")
+
+# Construir grafo (padrão: todas as coocorrências)
+builder = GraphBuilder(min_weight=1)
+arestas = builder.build(documents)
+
+print(f"Grafo construído: {len(arestas)} arestas")
+
+# Opcionalmente: converter para lista de adjacência
+adjacencia = GraphBuilder.to_adjacency_list(arestas)
+print(f"Vizinhos de 'market': {adjacencia.get('market', [])}")
+
+# Estatísticas
+stats = GraphBuilder.estatisticas(arestas)
+print(f"Peso máximo de aresta: {stats['peso_max']}")
+print(f"Densidade do grafo: {stats['densidade']:.6f}")
+```
+
+---
+
+## 🌳 Módulo: `Phase3Pipeline` (Fase 3)
+
+Classe responsável pela detecção de comunidades via Minimum Spanning Tree (MST) + particionamento recursivo.
+
+### Inicialização
+
+```python
+from src.communities.pipeline import Phase3Pipeline
+
+# Configuração padrão: 20 comunidades, mínimo 150 palavras/comunidade
+pipeline = Phase3Pipeline(
+    target_communities=20,
+    min_community_size=150,
+    verbose=True
+)
+```
+
+### Parâmetros do Construtor
+
+| Parâmetro | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `target_communities` | `int` | `20` | Número alvo de comunidades a gerar |
+| `min_community_size` | `int` | `150` | Tamanho mínimo de uma comunidade válida |
+| `verbose` | `bool` | `True` | Se True, imprime mensagens de progresso |
+
+### Métodos Principais
+
+#### 1. `run(edges: List[List]) -> Dict`
+
+Executa o pipeline completo: validação → MST → particionamento.
+
+**Parâmetros:**
+- `edges`: Lista de arestas da Fase 2:
+  ```python
+  [["palavra_a", "palavra_b", peso], ...]
+  ```
+
+**Retorno:** Dicionário com resultado completo:
+```python
+{
+    "mst_edges": [...],           # Arestas da MST (~5000)
+    "communities": [...],         # 20 listas de palavras
+    "statistics": {
+        "input_edges": 2500000,
+        "validated_edges": 2500000,
+        "mst_edges": 5000,
+        "communities_count": 20,
+        "avg_community_size": 250.0
+    }
+}
+```
+
+**Fluxo interno:**
+1. **Validação** (5 regras contrato): verifica tipos e estrutura
+2. **Conversão**: peso → distância (1/peso)
+3. **Ordenação**: por distância crescente
+4. **Kruskal**: computa MST (reduz de 2.5M para ~5k arestas)
+5. **Particionamento**: divide recursivamente até 20 comunidades
+
+**Exceções:**
+- `TypeError`: Se contrato de entrada violado (tipo incorreto)
+- `ValueError`: Se dados inconsistentes (peso ≤ 0, lista vazia, etc)
+
+### Exemplo de Uso
+
+```python
+from src.utils import FileHandler
+from src.communities.pipeline import Phase3Pipeline
+
+# Carregar grafo da Fase 2
+with open("data/processed/graph_edges.pkl", "rb") as f:
+    import pickle
+    arestas = pickle.load(f)
+
+# Detectar comunidades
+pipeline = Phase3Pipeline(target_communities=20, min_community_size=150)
+resultado = pipeline.run(arestas)
+
+# Acessar comunidades
+comunidades = resultado["communities"]
+print(f"Comunidades geradas: {len(comunidades)}")
+
+# Examinar primeira comunidade
+primeira = comunidades[0]
+print(f"Comunidade 1: {len(primeira)} palavras")
+print(f"Termos: {sorted(primeira)[:20]}")
+
+# Estatísticas
+stats = resultado["statistics"]
+print(f"Arestas reduzidas de {stats['input_edges']} para {stats['mst_edges']}")
+```
+
+---
+
+## 🔌 Módulo: `exporter` (Auxiliar)
+
+Conector da Fase 2 → Fase 3. Fornece função para importar dados processados.
+
+### Funções Disponíveis
+
+#### 1. `importar_dados_fase2(theme: str = "all") -> List[List]`
+
+Carrega e retorna a lista plana de arestas da Fase 2.
+
+**Parâmetros:**
+- `theme`: Tema de documentos a carregar
+  - `"all"`: Todas as categorias combinadas (padrão)
+  - `"business"`: Apenas artigos de negócios
+  - `"entertainment"`: Apenas artigos de entretenimento
+
+**Retorno:** Lista plana de arestas:
+```python
+[
+    ["market", "stock", 125],
+    ["business", "trade", 98],
+    ...
+]
+```
+
+**Exemplo:**
+```python
+from src.graph.exporter import importar_dados_fase2
+
+# Carregar grafo completo
+arestas = importar_dados_fase2()
+print(f"Carregadas {len(arestas)} arestas")
+
+# Carregar apenas tema 'business'
+arestas_business = importar_dados_fase2(theme="business")
+print(f"Arestas de negócios: {len(arestas_business)}")
+```
+
+**Nota:** Se os arquivos `.pkl` não existirem, a função levanta `FileNotFoundError` com mensagem descritiva indicando qual arquivo está faltando.
+
+---
+
+## 📊 Resumo da Arquitetura (Fases 1-3)
+
+```
+Fase 1 (TextProcessor)
+  ├─ Entrada: Arquivos .txt brutos
+  ├─ Saída: documents.pkl com sets de tokens
+  └─ Documentação: Seção "TextProcessor" acima
+
+Fase 2 (GraphBuilder)
+  ├─ Entrada: documents.pkl (Fase 1)
+  ├─ Saída: graph_edges.pkl com lista de arestas
+  └─ Documentação: Seção "GraphBuilder" acima
+
+Fase 3 (Phase3Pipeline)
+  ├─ Entrada: graph_edges.pkl (Fase 2)
+  ├─ Saída: 20 comunidades de palavras relacionadas
+  └─ Documentação: Seção "Phase3Pipeline" acima
+
+Auxiliares:
+  ├─ FileHandler: I/O genérico
+  ├─ exporter: Conexão Fase 2 → Fase 3
+  └─ stopwords: Gerenciador de palavras comuns
+```
+
+---
+
+## ⚡ Referência Rápida
+
+| Classe | Método | Entrada | Saída |
+|---|---|---|---|
+| `TextProcessor` | `process_document()` | `str` (texto) | `Set[str]` (tokens) |
+| `GraphBuilder` | `build()` | `List[Dict]` (docs) | `List[List]` (arestas) |
+| `Phase3Pipeline` | `run()` | `List[List]` (arestas) | `Dict` (comunidades) |
+| `FileHandler` | `load_python_pickle()` | `str` (caminho) | `List[Dict]` ou `List[List]` |
+| `exporter` | `importar_dados_fase2()` | `str` (tema) | `List[List]` (arestas) |

@@ -2,187 +2,265 @@
 
 ## 📋 Descrição
 
-Este projeto implementa um pipeline completo de **Processamento de Linguagem Natural (PLN)** com o objetivo de detectar tópicos (comunidades) em notícias utilizando estruturas de grafos. O projeto é desenvolvido em Python 3.12+ e conta com **zero dependências externas**.
+Pipeline completo de **Processamento de Linguagem Natural (PLN)** para detectar tópicos (comunidades) em notícias utilizando estruturas de grafos. Desenvolvido em Python 3.12+ com **Spacy** para processamento de texto.
 
-### Dataset
-
-**BBC News Dataset** com foco em 896 artigos das categorias:
-
-- 🏢 Business (510 notícias)
-- 🎬 Entertainment (386 notícias)
+**Dataset:** BBC News - 896 artigos (Business 510 + Entertainment 386)
 
 ---
 
-## 🚀 Guia de Início Rápido (30 Segundos)
+## 🚀 Quick Start (30 Segundos)
 
 ```bash
-# 1. Entrar na pasta do projeto
+# Entrar na pasta do projeto
 cd projeto-final-grupo-2-EDA2-2026-01-Turma-03
 
-# 2. Executar o pipeline de pré-processamento
+# Executar pipeline completo (Fase 1 + Fase 2)
 python3 main.py
 
-# ✅ Pronto! Seus dados limpos estão gerados em data/processed/
+# ✅ Pronto! Dados gerados em data/processed/
 ```
 
-### Outros comandos úteis:
+---
 
-- **Ver exemplos práticos:** `python3 examples.py`
-- **Validar os dados com testes:** `python3 tests.py`
+## 📖 Documentação
+
+- **README.md** (este arquivo) - Uso, arquitetura e guia rápido
+- **API.md** - Documentação técnica detalhada de classes e métodos
+- **Docstrings** nos arquivos - Apenas o essencial, não repetir README
 
 ---
 
 ## 🏗️ Estrutura do Projeto
 
 ```
-pln-grafos/
+projeto-final-grupo-2-EDA2-2026-01-Turma-03/
+├── main.py                        # Pipeline: Fase 1 + Fase 2
+├── see.py                         # Visualização interativa de comunidades
+├── run_tests.py                   # Test runner
+├── README.md                       # Este arquivo
+├── API.md                         # Documentação técnica detalhada
 │
-├── src/                       # Código-fonte principal
+├── src/                           # Código-fonte
+│   ├── preprocessing/             # Fase 1: Pré-processamento
+│   │   ├── text_processor.py     # TextProcessor class
+│   │   └── stopwords.py          # Gerenciador de stopwords
+│   ├── graph/                    # Fase 2: Construção de grafo
+│   │   ├── graph_builder.py      # GraphBuilder class
+│   │   └── exporter.py           # Conector Fase 2 → Fase 3
+│   ├── communities/              # Fase 3: Detecção de comunidades
+│   │   ├── pipeline.py           # Phase3Pipeline class
+│   │   └── __init__.py
+│   └── utils/
+│       └── file_handler.py       # FileHandler class (I/O)
+│
+├── tests/                         # Testes separados por fase
+│   ├── test_phase1.py            # 5 testes de pré-processamento
+│   ├── test_phase2.py            # 6 testes de grafo
+│   ├── test_phase3.py            # 7 testes de comunidades
 │   ├── __init__.py
-│   ├── preprocessing/         # Módulo de pré-processamento (TextProcessor, Stopwords)
-│   ├── utils/                 # Utilitários de I/O (FileHandler)
-│   └── graph/                 # Módulo de grafos (Fase 2)
-│       ├── graph_builder.py   # Classe GraphBuilder (lógica de coocorrência)
-│       └── fase2_export.py    # Conector Fase 2 -> Fase 3 (importar_dados_fase2)
+│   └── conftest.py               # pytest fixtures
 │
 ├── data/
-│   ├── raw/                   # Dados brutos (business/ e entertainment/)
-│   └── processed/             # Dados pré-processados (Saídas do pipeline)
+│   ├── raw/                       # Dados brutos (input)
+│   │   ├── business/             # 510 artigos
+│   │   └── entertainment/        # 386 artigos
+│   └── processed/                 # Dados processados (output)
 │
-├── main.py                    # Fase 1: pré-processamento (orquestrador)
-├── build_graph.py             # Fase 2: construção do grafo de coocorrência
-├── examples.py                # Exemplos de uso rápido
-├── tests.py                   # Testes de validação (Fases 1 e 2)
-├── pyproject.toml             # Configuração do projeto
-├── README.md                  # Este arquivo (Visão geral e arquitetura)
-└── API.md                     # Documentação detalhada de classes e métodos
+└── pyproject.toml                 # Configuração do projeto
 ```
 
 ---
 
-## 🧠 Pipeline de Pré-processamento
+## 🧠 Pipeline de 3 Fases
 
-Cada documento de texto bruto passa pelas seguintes etapas sequenciais dentro do orquestrador:
+### 🔄 Fase 1: Pré-processamento de Textos
+
+Cada documento passa por 7 etapas sequenciais:
 
 ```
 ENTRADA (Texto Bruto)
         ↓
-┌─────────────────────────────────┐
-│ 1. NORMALIZAÇÃO                 │ -> Remove espaços em branco extras
-└─────────────────────────────────┘
+1. Normalização          → Remove espaços em branco extras
+2. Minúsculas           → Converte para lowercase
+3. Remover Pontuação    → Remove !, @, #, $, etc.
+4. Tokenização          → Divide em lista de palavras
+5. Filtro de Tokens     → Remove palavras < 2 chars e números puros
+6. Remover Stopwords    → Filtra palavras comuns (the, and, a, etc.)
+7. Deduplicação         → Converte para Set (garante unicidade)
         ↓
-┌─────────────────────────────────┐
-│ 2. MINÚSCULAS                   │ -> Converte todo o texto para lowercase
-└─────────────────────────────────┘
-        ↓
-┌─────────────────────────────────┐
-│ 3. REMOVER PONTUAÇÃO            │ -> Remove caracteres como !, @, #, $, etc.
-└─────────────────────────────────┘
-        ↓
-┌─────────────────────────────────┐
-│ 4. TOKENIZAÇÃO                  │ -> Divide a string de texto em uma lista de palavras
-└─────────────────────────────────┘
-        ↓
-┌─────────────────────────────────┐
-│ 5. FILTRO DE TOKENS             │ -> Remove palavras menores que 2 caracteres e números puros
-└─────────────────────────────────┘
-        ↓
-┌─────────────────────────────────┐
-│ 6. REMOVER STOPWORDS            │ -> Filtra palavras comuns sem valor semântico (the, and, a)
-└─────────────────────────────────┘
-        ↓
-┌─────────────────────────────────┐
-│ 7. DEDUPLICAÇÃO                 │ -> Converte o resultado para Set (garante palavras únicas)
-└─────────────────────────────────┘
-        ↓
-SAÍDA: Set[str] (Tokens únicos prontos para o grafo)
+SAÍDA: Set[str] (Tokens únicos por documento)
 ```
 
+**Inputs:**
+
+- Arquivos .txt em `data/raw/business/` e `data/raw/entertainment/`
+
+**Outputs:**
+
+- `data/processed/documents.json` - Formato legível
+- `data/processed/documents.jsonl` - Formato JSON Lines
+- `data/processed/documents.pkl` - Pickle (preserva tipos nativos)
+
+### 🔗 Fase 2: Construção do Grafo de Coocorrência
+
+Cria um grafo ponderado onde:
+
+- **Nós:** palavras (tokens)
+- **Arestas:** pares de palavras que aparecem juntas
+- **Peso:** frequência de coocorrência
+
+**Inputs:**
+
+- `data/processed/documents.pkl` (Fase 1)
+
+**Outputs:**
+
+- `data/processed/graph_edges.pkl` - Formato nativo Python
+- `data/processed/graph_edges.json` - Formato legível
+
+**Contrato da Fase 2 (validado em testes):**
+
+1. Output é uma `list`
+2. Não está vazia
+3. Cada elemento é uma `list` de exatamente 3 elementos: `[palavra1, palavra2, peso]`
+4. `palavra1` e `palavra2` são `str`
+5. `peso` é `int` ou `float` > 0
+
+### 🌳 Fase 3: Detecção de Comunidades
+
+Particiona o grafo em 20 comunidades balanceadas usando:
+
+1. Conversão peso → distância
+2. Minimum Spanning Tree (Kruskal)
+3. Particionamento recursivo
+
+**Inputs:**
+
+- `data/processed/graph_edges.pkl` (Fase 2)
+
+**Outputs:**
+
+- 20 comunidades ordenadas por relevância
+- Cada comunidade contém palavras relacionadas (tópicos)
+
 ---
 
-## 📊 Formatos de Saída Disponíveis
+## 🎯 Como Usar
 
-Após rodar o comando principal, a Fase 1 salva os dados em três formatos dentro de `data/processed/` para garantir flexibilidade nas próximas fases:
-
-| Formato    | Arquivo           | Melhor Caso de Uso                                     |
-| :--------- | :---------------- | :----------------------------------------------------- |
-| **JSON**   | `documents.json`  | Legível por humanos, altamente compatível.             |
-| **JSONL**  | `documents.jsonl` | Processamento em linha (Streaming), economiza memória. |
-| **Pickle** | `documents.pkl`   | Preserva o tipo nativo `set` do Python.                |
-
----
-
-## 🔗 Fase 2 — Construção do Grafo de Coocorrência
-
-A Fase 2 transforma os tokens da Fase 1 em um **grafo de coocorrência de
-palavras**, na forma de uma **lista plana de arestas** `[[palavra_A, palavra_B,
-peso], ...]` — o formato consumido e validado pela Fase 3 (detecção de
-comunidades via MST/Kruskal).
-
-Para cada notícia, cruzam-se todos os pares de palavras que aparecem juntas; cada
-reaparição do par em outro documento incrementa o peso da aresta.
+### Executar Pipeline Completo (Padrão)
 
 ```bash
-# Pré-requisito: ter rodado a Fase 1 (python main.py)
-python build_graph.py        # grafo completo (todas as coocorrências)
-python build_graph.py 2      # opcional: descarta arestas de peso 1 (ruído)
-python tests.py              # testes das Fases 1 e 2 (inclui o contrato da Fase 3)
+python3 main.py
 ```
 
-### Formato de saída (contrato com a Fase 3)
+Executa Fase 1 + Fase 2 sequencialmente.
 
-Cada aresta é uma sublista de 3 elementos `[palavra_A, palavra_B, peso]`:
+### Executar Apenas Fase 1
 
-- índices `[0]` e `[1]`: palavras (`str`), sempre em ordem (par canônico, então
-  A‑B e B‑A são a mesma aresta);
-- índice `[2]`: peso de coocorrência (`int` > 0).
-
-Internamente o acúmulo usa um `dict` (chave = par canônico) para incremento em
-O(1); a entrega final é convertida para a **lista plana de arestas**, que é o
-formato que a Fase 3 valida no Passo 0 do notebook.
-
-O conector `src/graph/fase2_export.py` entrega essa lista pronta para a Fase 3:
-
-```python
-from src.graph.fase2_export import importar_dados_fase2
-grafo_linear_bruto = importar_dados_fase2()
+```bash
+python3 main.py phase1
 ```
 
-### Decisão importante: tamanho do grafo x limiar de peso
+Pré-processa documentos, salva em `data/processed/`.
 
-O grafo **completo** (`min_weight=1`) do dataset tem **~6 milhões de arestas**
-(~93 MB em pickle, ~153 MB em JSON). Cerca de **78% delas têm peso 1** — pares de
-palavras que apareceram juntos em um único documento (ruído).
+### Executar Apenas Fase 2
 
-- O **código** mantém o padrão fiel à especificação: `min_weight=1` = grafo
-  completo, sem perder informação.
-- O **arquivo já incluído** neste pacote (`graph_edges.pkl`/`.json`) foi gerado
-  com **`min_weight=2`** (~1,34 M de arestas, ~21 MB). Isso remove apenas os pares
-  de peso 1 e deixa o grafo leve o suficiente para o Kruskal em Python puro rodar
-  bem no Colab, sem mudar as conexões realmente relevantes.
+```bash
+python3 main.py phase2
+```
 
-Para gerar a versão completa, basta rodar `python build_graph.py 1`. A escolha do
-limiar fica a critério do grupo — o tradeoff está documentado aqui para a decisão
-ser consciente. Termos como `there` e `time` ainda aparecem entre as conexões
-mais fortes; se quiserem um grafo mais limpo, vale adicioná-los às stopwords da
-Fase 1 (ver Exemplo 3 do [`API.md`](API.md)).
+Constrói grafo. Requer Fase 1 já executada.
+
+### Ver Ajuda
+
+```bash
+python3 main.py --help
+```
 
 ---
 
-## 📈 Estruturas de Dados Utilizadas & Desempenho
+## 🧪 Executando Testes
 
-Visando a eficiência exigida na disciplina de Estrutura de Dados 2, foram escolhidas as seguintes estruturas nativas:
+### Todos os Testes
 
-- **`set` (Conjuntos):** Utilizado para os tokens de cada documento e armazenamento de stopwords. Garante remoção automática de duplicatas e busca com complexidade de tempo média estável de $O(1)$.
-- **`list` (Listas):** Utilizada para armazenar o lote de documentos, preservando a ordem de leitura e permitindo iteração linear eficiente.
-- **`dict` (Dicionários):** Utilizado para mapear as propriedades estruturadas de cada documento (`id`, `category`, `tokens`), garantindo acesso direto e semântico às propriedades.
+```bash
+python3 run_tests.py
+```
+
+Ou com pytest:
+
+```bash
+pytest tests/ -v
+```
+
+### Teste Específico
+
+```bash
+# Apenas Fase 1
+python3 run_tests.py phase1
+python3 -m tests.test_phase1
+
+# Apenas Fase 2
+python3 run_tests.py phase2
+python3 -m tests.test_phase2
+
+# Apenas Fase 3
+python3 run_tests.py phase3
+python3 -m tests.test_phase3
+```
+
+### Resultados de Testes
+
+- **Phase 1:** 5 testes (JSON, JSONL, Pickle, Qualidade, Integração)
+- **Phase 2:** 6 testes (Coocorrência, Peso, Canonicalidade, Filtro, Ordenação, Contrato)
+- **Phase 3:** 7 testes (Validação, Conversão, Sorting, MST, Partição, Integração, Dados Reais)
+
+**Total:** 18/18 testes passando ✅
 
 ---
 
-## 👥 Integrantes
+## 📊 Visualização de Comunidades
 
-- Gabriel da Cunha Barbaceli
+Após executar o pipeline completo, visualize as comunidades com:
 
-## 📄 Licença
+```bash
+python3 see.py
+```
 
-Projeto acadêmico - Universidade de Brasília (UnB).
+### Exemplos de Uso
+
+```bash
+# Mostrar página 1 (10 comunidades por página)
+python3 see.py --page 1 --per-page 10
+
+# Filtrar por tema
+python3 see.py --theme business
+python3 see.py --theme entertainment
+
+# Zoom em comunidade específica (mostra termos mais relevantes)
+python3 see.py --zoom 3 --zoom-terms 30
+
+# Demo rápido
+python3 see.py --demo
+```
+
+---
+
+## ⚙️ Requisitos
+
+- **Python:** 3.12+
+- **Dependências:** Spacy 3.8+ (PLN) + modelo en-core-web-sm
+- **Disco:** ~100MB (datasets inclusos)
+
+---
+
+## Dúvidas?
+
+1. **Como usar o Script:** `python3 main.py --help`
+2. **Detalhes Técnicos:** Ver `API.md`
+3. **Executar Testes:** `python3 run_tests.py --help`
+4. **Ver Comunidades:** `python3 see.py --help`
+
+---
+
+**Última atualização:** 17 de junho de 2026

@@ -18,7 +18,7 @@ Etapas do pipeline:
 
 import re
 import string
-from typing import List, Set, Dict, Any, Optional
+from typing import List, Set, Dict, Any
 
 from .stopwords import is_stopword
 

@@ -1,84 +1,63 @@
 from pathlib import Path
-from contextlib import redirect_stdout
 from collections import defaultdict
+from typing import List, Dict, Tuple
 import argparse
-import io
-import importlib.util
 import os
-import sys
+
+# Script de visualização das comunidades detectadas.
+# Documentação completa: README.md
+
+from src.communities import Phase3Pipeline
+from src.graph.exporter import importar_dados_fase2
 
 
-# Script de entrada da raiz do projeto.
-#
-# Este arquivo fica na raiz para você rodar comandos como `python -u see.py ...`
-# a partir da pasta `projeto-final-grupo-2-EDA2-2026-01-Turma-03`.
-# Internamente ele carrega os módulos de `src/Part3-community-creation` por
-# caminho explícito, então não depende do diretório atual além da raiz do projeto.
-#
-# Exemplos de uso (executar no terminal a partir da raiz do projeto):
-#
-# Entrar na pasta do projeto primeiro e depois executar o script:
-#   cd \PARTE3-EDA2\projeto-final-grupo-2-EDA2-2026-01-Turma-03
-#   python -u see.py --page 1 --per-page 10 --theme entertainment
-#
-# Mostrar página 2 (próxima página):
-#   cd \PARTE3-EDA2\projeto-final-grupo-2-EDA2-2026-01-Turma-03
-#   python -u see.py --page 2 --per-page 10
-#
-# Mostrar somente palavras de business ou entertainment:
-#   cd \PARTE3-EDA2\projeto-final-grupo-2-EDA2-2026-01-Turma-03
-#   python -u see.py --page 1 --per-page 10 --theme business
-#   python -u see.py --page 1 --per-page 10 --theme entertainment
-#
-# Dar "zoom" em um subtema pelo ID mostrado na tabela (ex.: ID 3), mostrando 30 termos:
-#   cd \PARTE3-EDA2\projeto-final-grupo-2-EDA2-2026-01-Turma-03
-#   python -u see.py --zoom 3 --zoom-terms 30 --theme business
-#
-# Demo rápida (mostra página 1 e faz zoom no subtema 1 com 20 termos):
-#   cd \PARTE3-EDA2\projeto-final-grupo-2-EDA2-2026-01-Turma-03
-#   python -u see.py --demo
-#
-# Observações:
-# - Os IDs dos subtemas aparecem na primeira coluna da tabela (coluna `ID`).
-# - Os termos no zoom são ordenados por relevância (grau no MST) e mostram o valor de grau ao lado.
-# - Se pedir mais termos do que o subtema tem, serão exibidos todos os termos disponíveis.
-# - O parâmetro `--theme` seleciona qual grafo será carregado: `all`, `business` ou `entertainment`.
-# - Esse tema é repassado para a Fase 2 e faz o script usar os arquivos separados de grafo gerados para cada tema.
+def carregar_contexto_tema(theme: str) -> Tuple[List[List[str]], Dict[str, int]]:
+    """
+    Carrega e processa comunidades para um tema específico.
 
+    Args:
+        theme: Tema a carregar ('all', 'business', ou 'entertainment')
 
-ROOT_DIR = Path(__file__).resolve().parent
-MODULE_DIR = ROOT_DIR / 'src' / 'Part3-community-creation'
-if str(MODULE_DIR) not in sys.path:
-    sys.path.insert(0, str(MODULE_DIR))
-
-
-def _load_module(module_name, file_name):
-    module_path = MODULE_DIR / file_name
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec and spec.loader
-    spec.loader.exec_module(module)
-    return module
-
-
-def carregar_contexto_tema(theme: str):
+    Returns:
+        Tupla (comunidades_ordenadas, grau_por_palavra) onde:
+        - comunidades_ordenadas: Lista de comunidades (cada uma é lista de palavras)
+        - grau_por_palavra: Dicionário mapeando palavra → grau na MST
+    """
+    # Carregar dados da Fase 2
     os.environ['GRAPH_THEME'] = theme
-    _buffer_saida = io.StringIO()
-    with redirect_stdout(_buffer_saida):
-        communities_mod = _load_module(f'communities_{theme}', 'communities.py')
-        kruskal_mod = _load_module(f'kruskal_{theme}', 'kruskal.py')
+    edges = importar_dados_fase2()
 
-    # Reordena por grau no MST
+    # Executar Phase 3 Pipeline
+    pipeline = Phase3Pipeline(verbose=False)
+    resultado = pipeline.run(edges)
+
+    comunidades = resultado["communities"]
+    mst_edges = resultado["mst_edges"]
+
+    # Calcular grau de cada palavra na MST
     grau = defaultdict(int)
-    for a, b, _ in kruskal_mod.grafo_fase3_mst:
+    for a, b, _ in mst_edges:
         grau[a] += 1
         grau[b] += 1
-    matriz_base = [sorted(sub, key=lambda w: (-grau.get(w, 0), w)) for sub in communities_mod.subtemas_fase3_finais]
+
+    # Ordenar palavras dentro de cada comunidade por grau (decrescente)
+    matriz_base = [
+        sorted(com, key=lambda w: (-grau.get(w, 0), w))
+        for com in comunidades
+    ]
     matriz_base.sort(key=len, reverse=True)
+
     return matriz_base, grau
 
 
-def render_page(subtemas, grau, theme, page: int, per_page: int, max_keyword_chars: int):
+def render_page(
+    subtemas: List[List[str]],
+    grau: Dict[str, int],
+    theme: str,
+    page: int,
+    per_page: int,
+    max_keyword_chars: int
+) -> str:
     total = len(subtemas)
     start = (page - 1) * per_page
     end = min(start + per_page, total)
@@ -114,7 +93,13 @@ def render_page(subtemas, grau, theme, page: int, per_page: int, max_keyword_cha
     return ''.join(out)
 
 
-def zoom_subtema(subtemas, grau, theme, subtema_id: int, termos: int):
+def zoom_subtema(
+    subtemas: List[List[str]],
+    grau: Dict[str, int],
+    theme: str,
+    subtema_id: int,
+    termos: int
+) -> str:
     if subtema_id < 1 or subtema_id > len(subtemas):
         return f'[ERRO] ID de subtema inválido: {subtema_id}\n'
 
@@ -128,7 +113,8 @@ def zoom_subtema(subtemas, grau, theme, subtema_id: int, termos: int):
     return ''.join(linhas)
 
 
-def main():
+def main() -> None:
+    """Executa a interface ASCII para visualização de comunidades."""
     parser = argparse.ArgumentParser(description='Interface ASCII para visualizar subtemas')
     parser.add_argument('--page', type=int, default=1, help='Página a mostrar (1-based)')
     parser.add_argument('--per-page', type=int, default=10, help='Subtemas por página')
