@@ -38,7 +38,7 @@ python -m venv .venv
 
 ### 2. Instalar Dependências
 
-Com o ambiente ativado (você verá (.venv) no início da linha do terminal):
+Com o ambiente ativado:
 
 ```bash
 pip install -e .
