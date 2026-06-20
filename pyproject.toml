@@ -4,9 +4,13 @@ version = "1.0.0"
 description = "Projeto de detecção de tópicos com grafos"
 readme = "README.md"
 requires-python = ">=3.12"
+
 dependencies = [
     "spacy>=3.8,<4",
     "click>=8.0.0",
     "setuptools",
+    "pandas",
+    "networkx",
+    "pyvis",
     "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
 ]
