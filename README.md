@@ -308,4 +308,25 @@ python3 see.py --theme business --page 1 --per-page 5 --max-kw-chars 150 --zoom 
 
 ---
 
-**Última atualização:** 17 de junho de 2026
+## 🖥️ Fase 5: Renderização Visual (`visual.py`)
+
+O arquivo `visual.py` é a interface de execução final do projeto, fornecendo um aplicativo desktop (GUI) para consumir e renderizar os grafos interativos no navegador. Ele salva os resultados automaticamente na pasta `src/` e possui filtros dinâmicos de tema (`business`, `entertainment` ou `all`).
+
+### ⚠️ Restrições e Dependências de Uso
+
+**Atenção:** O `visual.py` atua estritamente como a **camada de apresentação**. Ele não executa a geração do grafo desde o começo (PLN, construção, agrupamento) no momento em que é aberto para não sobrecarregar o computador do usuário.
+
+Para que a interface gráfica funcione, **é obrigatório** que as etapas anteriores da pipeline já tenham sido processadas. O programa exige a presença dos seguintes arquivos na pasta `data/processed/`:
+* `graph_edges.pkl`
+* `comunidades_tabular_<tema>.csv`
+
+**Ordem de Execução Necessária:**
+1. Pré-processamento e PLN
+2. Construção do Grafo Ponderado
+3. Formação de Comunidades
+4. Exportação Tabular
+5. Renderização Visual (`python visual.py`)
+
+---
+
+**Última atualização:** 20 de junho de 2026
