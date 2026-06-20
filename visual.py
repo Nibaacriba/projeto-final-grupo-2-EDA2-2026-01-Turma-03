@@ -27,7 +27,7 @@ def atualizar_tabela(*args):
             resumo = ", ".join([p.strip() for p in str(linha["palavras"]).split(",")][:10]) + "..."
             tree.insert("", tk.END, values=(linha["id_comunidade"], linha["quantidade_palavras"], resumo))
     except FileNotFoundError:
-        tree.insert("", tk.END, values=("Aviso", "---", f"Arquivo CSV para '{tema}' não encontrado. Execute a Fase 4."))
+        tree.insert("", tk.END, values=("Aviso", "---", f"Ficheiro CSV para o tema '{tema}' não foi encontrado. Por favor, execute a Fase 4."))
 
 def gerar_grafo():
     tema = combo_tema.get()
@@ -38,20 +38,20 @@ def gerar_grafo():
         messagebox.showerror(
             "Restrição de Dependência", 
             f"Os dados pré-processados para o tema '{tema}' não foram encontrados.\n\n"
-            "O visual.py depende das etapas anteriores. Por favor, execute a pipeline na ordem:\n"
-            "1. PLN e Limpeza de Textos\n"
-            "2. Construção do Grafo\n"
-            "3. Formação de Comunidades\n"
-            "4. Exportação Tabular"
+            "O programa visual.py depende das etapas anteriores. Por favor, execute o pipeline na ordem:\n"
+            "1. Processamento de Linguagem Natural (PLN)\n"
+            "2. Construção do Grafo Ponderado\n"
+            "3. Formação e Particionamento de Comunidades\n"
+            "4. Exportação Tabular dos Dados"
         )
         return
 
     try:
         print("⏳ Iniciando o gerador de visualização...")
-        print(f"⏳ Passo 1: Lendo as comunidades do tema '{tema}'...")
+        print(f"⏳ Passo 1: A ler as comunidades do tema '{tema}'...")
         df = pd.read_csv(caminho_csv)
         
-        print("⏳ Passo 2: Separando as top 15 palavras de cada grupo...")
+        print("⏳ Passo 2: A extrair as 15 principais palavras de cada grupo...")
         G = nx.Graph()
         paleta = ["#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", 
                   "#911eb4", "#46f0f0", "#f032e6", "#bcf60c", "#fabebe"]
@@ -67,30 +67,129 @@ def gerar_grafo():
                 mapa_comunidade[p] = (id_com, cor) 
                 G.add_node(p, color=cor, title=f"Comunidade {id_com}")
         
-        print("⏳ Passo 3: Carregando as conexões do grafo...")
+        print("⏳ Passo 3: A carregar as conexões do grafo...")
         with open(caminho_pkl, "rb") as f:
             arestas = pickle.load(f)
 
-        print("⏳ Passo 4: Cruzando conexões VIPs...")
+        print("⏳ Passo 4: A cruzar conexões VIP...")
         for u, v, peso in arestas:
             if u in mapa_comunidade and v in mapa_comunidade:
                 id_com_u = mapa_comunidade[u][0]
                 id_com_v = mapa_comunidade[v][0]
                 
-                if id_com_u == id_com_v:
+                if id_com_u == id_com_v and peso >= 4:
                     G.add_edge(u, v, value=peso)
+
+        nos_isolados = [n for n, d in G.degree() if d == 0]
+        if nos_isolados:
+            print(f"⏳ A ligar {len(nos_isolados)} nós isolados às respetivas comunidades...")
+            for u in nos_isolados:
+                if u in mapa_comunidade:
+                    id_com_u, cor_u = mapa_comunidade[u]
+                    melhor_peso = -1
+                    melhor_vizinho = None
+                    
+                    for edge_u, edge_v, peso in arestas:
+                        vizinho = None
+                        if edge_u == u:
+                            vizinho = edge_v
+                        elif edge_v == u:
+                            vizinho = edge_u
+                        
+                        if vizinho and vizinho in mapa_comunidade:
+                            id_com_vizinho = mapa_comunidade[vizinho][0]
+                            if id_com_vizinho == id_com_u:
+                                if peso > melhor_peso:
+                                    melhor_peso = peso
+                                    melhor_vizinho = vizinho
+                    
+                    if melhor_vizinho:
+                        G.add_edge(u, melhor_vizinho, value=melhor_peso)
         
-        print("⏳ Passo 5: Desenhando o gráfico com física de agrupamento...")
+        print("⏳ Passo 5: A desenhar o gráfico com física de agrupamento...")
         net = Network(height="100vh", width="100%", bgcolor="#222222", font_color="white")
         net.from_nx(G)
         net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=100, damping=0.4, overlap=0)
         
         arquivo_html = str(SRC_DIR / f"grafo_interativo_{tema}.html")
         
-        print(f"⏳ Passo 6: Salvando o arquivo em {arquivo_html}...")
+        print(f"⏳ Passo 6: A guardar o ficheiro em {arquivo_html}...")
         net.save_graph(arquivo_html)
+
+        try:
+            with open(arquivo_html, "r", encoding="utf-8") as f:
+                conteudo_html = f.read()
+
+            css_loading_fix = """
+            <style>
+            #loadingBar {
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                height: 100% !important;
+                background-color: rgba(34, 34, 34, 0.95) !important;
+                transition: all 0.5s ease !important;
+                opacity: 1 !important;
+                z-index: 9999 !important;
+                display: flex !important;
+                justify-content: center !important;
+                align-items: center !important;
+                flex-direction: column !important;
+            }
+            #loadingBar .outerBorder {
+                display: flex !important;
+                align-items: center !important;
+                gap: 15px !important;
+                background: #2d2d2d !important;
+                padding: 20px 30px !important;
+                border-radius: 12px !important;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+                border: 1px solid #444 !important;
+                width: auto !important;
+                height: auto !important;
+                position: relative !important;
+            }
+            #text {
+                position: static !important;
+                font-size: 18px !important;
+                color: #ffffff !important;
+                font-family: Arial, sans-serif !important;
+                font-weight: bold !important;
+                width: auto !important;
+                height: auto !important;
+                margin: 0 !important;
+            }
+            #border {
+                position: static !important;
+                width: 250px !important;
+                height: 16px !important;
+                border: 1px solid #555 !important;
+                background: #111 !important;
+                border-radius: 8px !important;
+                overflow: hidden !important;
+                margin: 0 !important;
+            }
+            #bar {
+                position: static !important;
+                height: 100% !important;
+                background: #4CAF50 !important;
+                border: none !important;
+                border-radius: 0 !important;
+                transition: width 0.2s ease !important;
+                margin: 0 !important;
+            }
+            </style>
+            """
+            conteudo_html = conteudo_html.replace("</head>", f"{css_loading_fix}\n</head>")
+            
+            with open(arquivo_html, "w", encoding="utf-8") as f:
+                f.write(conteudo_html)
+            print("🎨 CSS de correção do carregamento aplicado com sucesso!")
+        except Exception as e:
+            print(f"⚠️ Aviso: Não foi possível aplicar as correções de CSS: {e}")
         
-        print(f"✅ SUCESSO! O arquivo foi gerado.")
+        print(f"✅ SUCESSO! O ficheiro foi gerado com sucesso.")
         
         webbrowser.open(f"file://{arquivo_html}")
         
@@ -114,7 +213,7 @@ def montar_interface():
     lbl_tema.pack(side=tk.LEFT, padx=5)
     
     combo_tema = ttk.Combobox(frame_tema, values=["business", "entertainment", "all"], font=("Arial", 12), state="readonly")
-    combo_tema.current(0)
+    combo_tema.current(2)
     combo_tema.pack(side=tk.LEFT, padx=5)
     
     combo_tema.bind("<<ComboboxSelected>>", atualizar_tabela)
@@ -136,7 +235,8 @@ def montar_interface():
     atualizar_tabela()
     
     btn = tk.Button(root, text="🎨 Gerar Grafo Interativo", font=("Arial", 12, "bold"), 
-                    bg="#4CAF50", fg="white", command=gerar_grafo)
+                    bg="#4CAF50", fg="#000000", activebackground="#45a049", activeforeground="#000000",
+                    relief=tk.RAISED, bd=2, command=gerar_grafo)
     btn.pack(pady=15, ipadx=10, ipady=10)
     
     root.mainloop()
