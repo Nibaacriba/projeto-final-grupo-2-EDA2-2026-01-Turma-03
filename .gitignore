@@ -44,9 +44,8 @@ env/
 .pydevproject
 
 # Dados processados (grandes arquivos)
-data/processed/*.json
-data/processed/*.jsonl
 data/processed/*.pkl
+data/processed/*.csv
 
 # Logs
 *.log

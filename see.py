@@ -7,6 +7,7 @@ import pickle
 
 from src.communities import Phase3Pipeline
 from src.graph.exporter import importar_dados_fase2
+from src.utils.tabular_export import TabularExporter
 
 
 def _mapear_vocabulario_por_tema(base_dir: Path) -> Dict[str, Set[str]]:
@@ -165,6 +166,9 @@ def main() -> None:
     except FileNotFoundError as e:
         print(e)
         return
+
+    caminho_saida = f"data/processed/comunidades_tabular_{args.theme}.csv"
+    TabularExporter.export_to_csv(subtemas, caminho_saida)
 
     if args.demo:
         print(render_page(subtemas, grau, args.theme, 1, args.per_page, args.max_kw_chars))
