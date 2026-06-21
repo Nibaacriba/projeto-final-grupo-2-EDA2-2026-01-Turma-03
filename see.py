@@ -1,24 +1,21 @@
 from pathlib import Path
 from collections import defaultdict
-from typing import List, Dict, Tuple, Set
 import argparse
-import os
 import pickle
 
+# Imports
 from src.communities import Phase3Pipeline
 from src.graph.exporter import importar_dados_fase2
 from src.utils.tabular_export import TabularExporter
 
 
-def _mapear_vocabulario_por_tema(base_dir: Path) -> Dict[str, Set[str]]:
-    """
-    Carrega os documentos processados da Fase 1 (documents.pkl)
-    e monta um mapa de palavras únicas por categoria.
-    """
+def _mapear_vocabulario_por_tema(base_dir: Path):
+    """Mapeia vocabulário por tema a partir dos documentos processados"""
     vocab_por_tema = defaultdict(set)
     pkl_path = base_dir / "data" / "processed" / "documents.pkl"
 
     if not pkl_path.exists():
+        print(f"[AVISO] Arquivo {pkl_path} não encontrado.")
         return vocab_por_tema
 
     try:
@@ -27,75 +24,77 @@ def _mapear_vocabulario_por_tema(base_dir: Path) -> Dict[str, Set[str]]:
             for doc in documentos:
                 cat = doc.get("category")
                 tokens = doc.get("tokens", [])
-                if cat:
+                if cat and tokens:
                     vocab_por_tema[cat].update(tokens)
-    except Exception:
-        pass  # Se falhar, retorna o dicionário incompleto/vazio de forma segura
+    except Exception as e:
+        print(f"[ERRO] Falha ao carregar documents.pkl: {e}")
 
     return vocab_por_tema
 
 
-def carregar_contexto_tema(theme: str) -> Tuple[List[List[str]], Dict[str, int]]:
-    """
-    Carrega o grafo unificado e filtra as arestas dinamicamente
-    mantendo apenas as conexões entre palavras da categoria selecionada.
-    """
-    # 1. Carrega todas as arestas do arquivo único 'graph_edges.pkl'
+def carregar_contexto_tema(theme: str):
+    """Carrega dados e executa pipeline de comunidades"""
+    print(f"[INFO] Carregando dados para tema: {theme}")
     all_edges = importar_dados_fase2()
 
-    # Base do projeto para achar o documents.pkl
     base_dir = Path(__file__).resolve().parent
 
-    # 2. Filtra o grafo se o usuário escolheu um tema específico
+    # Filtragem por tema
     if theme in {"business", "entertainment"}:
         vocab_map = _mapear_vocabulario_por_tema(base_dir)
         palavras_validas = vocab_map.get(theme, set())
-
-        # Só mantém a aresta se AMBAS as palavras pertencerem ao vocabulário do tema
         edges_filtradas = [
             [u, v, w] for u, v, w in all_edges
             if u in palavras_validas and v in palavras_validas
         ]
+        print(f"[FILTRO] {len(edges_filtradas)} arestas mantidas para tema {theme}")
     else:
         edges_filtradas = all_edges
 
-    # 3. Executar Phase 3 Pipeline sobre as arestas filtradas
-    pipeline = Phase3Pipeline(verbose=False)
+    # Executa Phase 3
+    pipeline = Phase3Pipeline(verbose=True)
     resultado = pipeline.run(edges_filtradas)
 
     comunidades = resultado["communities"]
     mst_edges = resultado["mst_edges"]
 
-    # Calcular grau de cada palavra na MST
+    # Calcula grau
     grau = defaultdict(int)
     for a, b, _ in mst_edges:
         grau[a] += 1
         grau[b] += 1
 
-    # Ordenar palavras dentro de cada comunidade por grau (decrescente)
+    # Ordena comunidades
     matriz_base = [
         sorted(com, key=lambda w: (-grau.get(w, 0), w))
         for com in comunidades
     ]
     matriz_base.sort(key=len, reverse=True)
 
+    data_dir = base_dir / "data" / "processed"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    # Exporta arestas por comunidade (essencial para GUI rápida)
+    edges_path = data_dir / f"mst_edges_{theme}.pkl"
+    with open(edges_path, "wb") as f:
+        pickle.dump(resultado["edges_per_community"], f)
+    print(f"[EXPORT] Arestas por comunidade → {edges_path}")
+
+    # Exporta CSV tabular
+    csv_path = data_dir / f"comunidades_tabular_{theme}.csv"
+    TabularExporter.export_to_csv(matriz_base, str(csv_path))
+    print(f"[EXPORT] Tabela → {csv_path}")
+
     return matriz_base, grau
 
 
-def render_page(
-    subtemas: List[List[str]],
-    grau: Dict[str, int],
-    theme: str,
-    page: int,
-    per_page: int,
-    max_keyword_chars: int
-) -> str:
+def render_page(subtemas, grau, theme, page=1, per_page=10, max_keyword_chars=120):
     total = len(subtemas)
     start = (page - 1) * per_page
     end = min(start + per_page, total)
 
     if total == 0:
-        return f"Tema selecionado: {theme}\n[AVISO] Nenhuma comunidade encontrada com os critérios atuais.\n"
+        return f"Tema selecionado: {theme}\n[AVISO] Nenhuma comunidade encontrada.\n"
 
     header_top10 = ', '.join(
         f'{w}({grau.get(w, 0)})'
@@ -104,60 +103,54 @@ def render_page(
 
     largura_id = 6
     largura_qtd = 13
-    largura_coluna_palavras = max_keyword_chars + 4
-    linha_separadora = f"+{'-' * largura_id}+{'-' * largura_qtd}+{'-' * largura_coluna_palavras}+\n"
+    largura_coluna = max_keyword_chars + 4
+    linha = f"+{'-' * largura_id}+{'-' * largura_qtd}+{'-' * largura_coluna}+\n"
 
-    out = []
-    out.append(f'Tema selecionado: {theme}\n')
-    out.append(f'Top 10 termos (grau): {header_top10}\n')
-    out.append(f'Mostrando subtemas {start + 1} a {end} de {total} (página {page})\n\n')
-    out.append(linha_separadora)
-    out.append(f"| {'ID':^{largura_id-2}} | {'QTD TERMOS':^{largura_qtd-2}} | {'PALAVRAS-CHAVE DO SUBTEMA':<{largura_coluna_palavras-2}} |\n")
-    out.append(linha_separadora.replace('-', '='))
+    out = [
+        f'Tema selecionado: {theme}\n',
+        f'Top 10 termos (grau): {header_top10}\n',
+        f'Mostrando subtemas {start + 1} a {end} de {total} (página {page})\n\n',
+        linha,
+        f"| {'ID':^{largura_id-2}} | {'QTD TERMOS':^{largura_qtd-2}} | {'PALAVRAS-CHAVE':<{largura_coluna-2}} |\n",
+        linha.replace('-', '=')
+    ]
 
     for idx in range(start, end):
         subtema = subtemas[idx]
-        id_subtema = f'{idx + 1:02d}'
-        qtd_termos = str(len(subtema))
+        id_sub = f'{idx + 1:02d}'
+        qtd = str(len(subtema))
         palavras = ', '.join(subtema)
         if len(palavras) > max_keyword_chars:
-            palavras = palavras[: max_keyword_chars - 3] + '...'
-        out.append(f"| {id_subtema:^{largura_id-2}} | {qtd_termos:^{largura_qtd-2}} | {palavras:<{largura_coluna_palavras-2}} |\n")
-        out.append(linha_separadora)
+            palavras = palavras[:max_keyword_chars - 3] + '...'
+        out.append(f"| {id_sub:^{largura_id-2}} | {qtd:^{largura_qtd-2}} | {palavras:<{largura_coluna-2}} |\n")
+        out.append(linha)
 
     return ''.join(out)
 
 
-def zoom_subtema(
-    subtemas: List[List[str]],
-    grau: Dict[str, int],
-    theme: str,
-    subtema_id: int,
-    termos: int
-) -> str:
+def zoom_subtema(subtemas, grau, theme, subtema_id, termos=20):
     if subtema_id < 1 or subtema_id > len(subtemas):
-        return f'[ERRO] ID de subtema inválido: {subtema_id}\n'
+        return f'[ERRO] ID inválido: {subtema_id}\n'
 
     lista = subtemas[subtema_id - 1][:termos]
     linhas = [
-        f'Tema selecionado: {theme}\n',
-        f'Zoom no subtema {subtema_id} — mostrando {len(lista)} de {len(subtemas[subtema_id - 1])} termos:\n',
+        f'Tema: {theme}\n',
+        f'Zoom no subtema {subtema_id} — {len(lista)} de {len(subtemas[subtema_id-1])} termos:\n'
     ]
     for i, termo in enumerate(lista, 1):
         linhas.append(f' {i:02d}. {termo} (grau={grau.get(termo, 0)})\n')
     return ''.join(linhas)
 
 
-def main() -> None:
-    """Executa a interface ASCII para visualização de comunidades."""
-    parser = argparse.ArgumentParser(description='Interface ASCII para visualizar subtemas do grafo.')
-    parser.add_argument('--page', type=int, default=1, help='Página a mostrar (1-based)')
-    parser.add_argument('--per-page', type=int, default=10, help='Subtemas por página')
-    parser.add_argument('--max-kw-chars', type=int, default=120, help='Max chars para lista de palavras por subtema')
-    parser.add_argument('--zoom', type=int, help='ID do subtema para dar zoom')
-    parser.add_argument('--zoom-terms', type=int, default=20, help='Quantos termos mostrar no zoom')
-    parser.add_argument('--demo', action='store_true', help='Executa demonstração rápida')
-    parser.add_argument('--theme', choices=['all', 'business', 'entertainment'], default='all', help='Filtrar palavras por tema')
+def main():
+    parser = argparse.ArgumentParser(description='Visualizador de Comunidades')
+    parser.add_argument('--theme', choices=['all', 'business', 'entertainment'], default='all')
+    parser.add_argument('--page', type=int, default=1)
+    parser.add_argument('--per-page', type=int, default=10)
+    parser.add_argument('--max-kw-chars', type=int, default=120)
+    parser.add_argument('--zoom', type=int, help='ID do subtema para zoom')
+    parser.add_argument('--zoom-terms', type=int, default=25)
+    parser.add_argument('--demo', action='store_true')
 
     args = parser.parse_args()
 
@@ -166,14 +159,14 @@ def main() -> None:
     except FileNotFoundError as e:
         print(e)
         return
-
-    caminho_saida = f"data/processed/comunidades_tabular_{args.theme}.csv"
-    TabularExporter.export_to_csv(subtemas, caminho_saida)
+    except Exception as e:
+        print(f"Erro durante processamento: {e}")
+        return
 
     if args.demo:
         print(render_page(subtemas, grau, args.theme, 1, args.per_page, args.max_kw_chars))
         if subtemas:
-            print(zoom_subtema(subtemas, grau, args.theme, 1, args.zoom_terms))
+            print("\n" + zoom_subtema(subtemas, grau, args.theme, 1, args.zoom_terms))
         return
 
     if args.zoom:

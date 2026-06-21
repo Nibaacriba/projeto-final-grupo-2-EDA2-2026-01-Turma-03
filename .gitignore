@@ -64,3 +64,5 @@ dmypy.json
 # Testes temporários
 .tox/
 .hypothesis/
+
+src/*.html
